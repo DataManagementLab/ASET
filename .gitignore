@@ -1,0 +1,26 @@
+/venv/
+/.idea/
+__pycache__/
+
+# "libraries"
+/wiki-news-300d-1M-subword.vec
+/stanford-corenlp-full-2020-04-20
+/glove.6B.300d.txt
+
+# input and output
+/input/*
+!/input/info.info
+
+/output/*
+!/outoutput/info.info
+
+# evaluation results
+/results/*
+!/results/info.info
+
+# datasets
+/datasets/aviation/*
+!/datasets/aviation/aviation.py
+
+/datasets/corona/*
+!/datasets/corona/corona.py
