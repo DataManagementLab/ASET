@@ -15,14 +15,14 @@ if __name__ == "__main__":
     all_values = []
 
     paths = [  # FINDME: choose the results file names
-        "results/aviation/Stanza/signals/labels-mentions-contexts-positions.csv",
-        "results/aviation/Stanza/signals/labels-contexts-positions.csv",
-        "results/aviation/Stanza/signals/labels-mentions-positions.csv",
-        "results/aviation/Stanza/signals/labels-mentions-contexts.csv"
+        "../results/aviation/Stanza/signals/labels-mentions-contexts-positions.csv",
+        "../results/aviation/Stanza/signals/labels-contexts-positions.csv",
+        "../results/aviation/Stanza/signals/labels-mentions-positions.csv",
+        "../results/aviation/Stanza/signals/labels-mentions-contexts.csv"
     ]
 
     # paths = [  # FINDME: choose the results file names
-    #     "results/aviation/Stanza/end2end/aset.csv"
+    #     "../results/aviation/Stanza/end2end/aset.csv"
     # ]
     for file_path in paths:
         all_values.append(pd.read_csv(file_path, header=0, names=["attribute", "recall", "precision", "f1_score", "recall_diff_value", "precision_diff_value", "f1_score_diff_value"]))
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         ax.set_ylim((0, 1))
         ax.set_xticks(x)
         labels = ["registration_number" if attribute == "aircraft_registration_number" else attribute for attribute in attributes]
-        labels = ["intensive_care" if attribute == "patients_ntensive_care" else attribute for attribute in labels]
+        labels = ["intensive_care" if attribute == "patients_intensive_care" else attribute for attribute in labels]
         ax.set_xticklabels(labels)
         fig.autofmt_xdate(rotation=45)
         ax.set_ylabel("F1" if key == "f1_score" else key)

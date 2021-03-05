@@ -12,7 +12,7 @@ Copy your documents into `input` as `*.txt` files and run `run.py` to start the 
 
 ## Repository Structure
 * `aset` ASET implementation
-* `data sets` evaluation data sets
+* `datasets` evaluation data sets
 * `input` documents to be processed
 * `output` resulting output
 * `results` evaluation results
@@ -37,8 +37,7 @@ Check out the `requirements.txt` file to see which packages have to be installed
 
 You can install them with `pip install -r requirements.txt`.
 
-### PyTorch
-Among others, `Stanza` requires `PyTorch` to be installed. You may find installation guides here:
+You may have to install `torch` by hand if you want to use CUDA:
 
 https://pytorch.org/get-started/locally/
 
@@ -46,7 +45,9 @@ https://pytorch.org/get-started/locally/
 To prepare Stanza, you must execute `import stanza`, followed by `stanza.download('en')` to download the necessary resources.
 
 ### Stanford CoreNLP through Stanza
-Follow the guide for "Accessing Java Stanford CoreNLP software" from this link:
+To use Stanford CoreNLP through Stanza, you must execute `import stanza`, followed by `stanza.install_corenlp()` to set up the Stanford CoreNLP client.
+
+In case this automatic method does not work, follow the guide for "Accessing Java Stanford CoreNLP software" from this link:
 
 https://stanfordnlp.github.io/stanza/corenlp_client.html
 

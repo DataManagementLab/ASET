@@ -133,9 +133,12 @@ def get_bert_tokenizer_device():
         bert = BertModel.from_pretrained(
             "bert-large-cased"
         )
-        device = torch.device("cuda")
-        bert.to(device)
-        _bert_tokenizer_device = (bert, tokenizer, device)
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            bert.to(device)
+            _bert_tokenizer_device = (bert, tokenizer, device)
+        else:
+            _bert_tokenizer_device = (bert, tokenizer, None)
 
     return _bert_tokenizer_device
 

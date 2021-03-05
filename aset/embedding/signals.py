@@ -95,9 +95,14 @@ def context_with_bert_natural_language_embeddings(contexts: [str], mentions: [st
                          + tokenized_context["attention_mask"][left + 1:right + 1] \
                          + tokenized_context["attention_mask"][right + 2:]
 
-        input_ids = torch.tensor([input_ids]).to(get_bert_tokenizer_device()[2])
-        token_type_ids = torch.tensor([token_type_ids]).to(get_bert_tokenizer_device()[2])
-        attention_mask = torch.tensor([attention_mask]).to(get_bert_tokenizer_device()[2])
+        if torch.cuda.is_available():
+            input_ids = torch.tensor([input_ids]).to(get_bert_tokenizer_device()[2])
+            token_type_ids = torch.tensor([token_type_ids]).to(get_bert_tokenizer_device()[2])
+            attention_mask = torch.tensor([attention_mask]).to(get_bert_tokenizer_device()[2])
+        else:
+            input_ids = torch.tensor([input_ids])
+            token_type_ids = torch.tensor([token_type_ids])
+            attention_mask = torch.tensor([attention_mask])
 
         outputs = get_bert_tokenizer_device()[0](
             input_ids=input_ids,
@@ -106,12 +111,16 @@ def context_with_bert_natural_language_embeddings(contexts: [str], mentions: [st
         )
 
         # compute the average of the output embeddings of the mention tokens
-        output_embeddings = outputs[0].cpu()[0].detach().numpy()  # final hidden states
+        if torch.cuda.is_available():
+            output_embeddings = outputs[0].cpu()[0].detach().numpy()  # final hidden states
+        else:
+            output_embeddings = outputs[0][0].detach().numpy()
         mention_embeddings = output_embeddings[left:right]
         sum_mention_embeddings = sum(mention_embeddings)
         embeddings.append(np.divide(sum_mention_embeddings, right - left))
 
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     return embeddings
 
@@ -120,7 +129,8 @@ def sbert_natural_language_embeddings(texts: [str]):
     """Embed the given texts with Sentence-BERT."""
 
     embeddings = get_sentence_bert().encode(texts, show_progress_bar=False)
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     return embeddings
 
 

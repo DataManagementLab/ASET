@@ -54,7 +54,7 @@ if __name__ == "__main__":
                 for label in labels:
                     df[attribute][label] += 1
 
-        df.to_csv("types-labels-matrix.csv")
+        df.to_csv("../results/types-labels-matrix.csv")
 
         close_all_resources()
     except:

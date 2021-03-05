@@ -93,7 +93,7 @@ if __name__ == "__main__":
         plt.subplots_adjust(bottom=0.33, top=0.95, left=0.1, right=0.95)
 
         plt.savefig(
-            "results/" + dataset.NAME + "/exp0_" + dataset.NAME + ".pdf",
+            "../results/" + dataset.NAME + "/exp0_" + dataset.NAME + ".pdf",
             format="pdf",
             transparent=True
         )
@@ -110,7 +110,7 @@ if __name__ == "__main__":
             for attribute, num_extracted in zip(labels, nums_extracted[extractor]):
                 df[extractor][attribute] = num_extracted
 
-        df.to_csv("results/" + dataset.NAME + "/exp0_" + dataset.NAME + ".csv")
+        df.to_csv("../results/" + dataset.NAME + "/exp0_" + dataset.NAME + ".csv")
 
         plt.clf()
 

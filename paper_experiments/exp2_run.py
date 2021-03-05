@@ -329,7 +329,7 @@ if __name__ == "__main__":
             print(attribute, f1_scores_diff_value_median[attribute], sorted(f1_scores_diff_value[attribute]))
 
         # store the results
-        with open("results/" + dataset.NAME + "/Stanza/end2end/" + "aset" + ".csv", "w") as file:
+        with open("../results/" + dataset.NAME + "/Stanza/end2end/" + "aset" + ".csv", "w") as file:
             file.write("attribute, recall, precision, f1_score, recall_diff_value, precision_diff_value, f1_score_diff_value\n")
 
             for attribute in dataset.ATTRIBUTES:

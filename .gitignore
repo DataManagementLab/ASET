@@ -12,7 +12,7 @@ __pycache__/
 !/input/info.info
 
 /output/*
-!/outoutput/info.info
+!/output/info.info
 
 # evaluation results
 /results/*

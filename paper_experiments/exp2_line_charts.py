@@ -15,7 +15,7 @@ if __name__ == "__main__":
     param_values = []
     all_values = []
 
-    folder_path = "results/aviation/Stanza/max-distance/*.csv"
+    folder_path = "../results/aviation/Stanza/max-distance/*.csv"
     file_paths = glob(folder_path)
     for file_path in file_paths:
         param_values.append(float(file_path[file_path.rindex("\\") + 1:-4]))
@@ -59,7 +59,7 @@ if __name__ == "__main__":
             plt.plot([v[0] for v in x_y], [v[1] for v in x_y], marker + "--", ms=8, color=color, label=attribute)
 
         # static
-        # file_path = "results/aviation/Stanza/num-examples/0.csv"
+        # file_path = "../results/aviation/Stanza/num-examples/0.csv"
         # static_values = pd.read_csv(file_path, header=0, names=["attribute", "recall", "precision", "f1_score", "recall_diff_value", "precision_diff_value", "f1_score_diff_value"])
         #
         # for index, color, marker in zip(highlighted_attributes, colors, markers):
