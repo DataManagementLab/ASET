@@ -9,11 +9,11 @@ import logging.config
 import random
 import traceback
 from collections import defaultdict
+from os.path import isfile
 
 import numpy as np
 
 import aset.matching.strategies as strategies
-from datasets.aviation import aviation as dataset
 from aset.core.resources import close_all_resources
 from aset.embedding.aggregation import ExtractionEmbeddingMethod, AttributeEmbeddingMethod
 from aset.extraction.common import Document, Extraction
@@ -21,6 +21,7 @@ from aset.extraction.extractionstage import ExtractionStage
 from aset.extraction.extractors import StanzaExtractor as Extractor
 from aset.matching.common import Attribute
 from aset.matching.matchingstage import MatchingStage
+from datasets.aviation import aviation as dataset
 
 logging.config.fileConfig("../logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger()
@@ -31,12 +32,14 @@ def do_evaluation_run(
         random_seed: int,
         documents: [],
         column_names: [str],
-        column_name2attribute_name: {},
-        aset_extraction_stage: ExtractionStage,
-        param_value
+        column_name2attribute_name: {}
 ):
     """Evaluate the system with the given random seed and parameters."""
     print("\n\n\nExecuting run {}.".format(run + 1))
+
+    # load the extraction stage
+    with open("cache.json", "r", encoding="utf-8") as file:
+        aset_extraction_stage = ExtractionStage.from_json_str(file.read())
 
     # set the random seed
     random.seed(random_seed)
@@ -73,11 +76,17 @@ def do_evaluation_run(
         # strategy=strategies.StaticMatching(
         #     max_distance=0.3
         # ),
-        strategy=strategies.TreeSearchExploration(
-            max_roots=2,
-            max_initial_tries=10,
+        # strategy=strategies.TreeSearchExploration(
+        #     max_roots=2,
+        #     max_initial_tries=10,
+        #     max_children=2,
+        #     explore_far_factor=1.15,
+        #     max_distance=0.3,
+        #     max_interactions=25
+        # ),
+        strategy=strategies.DFSExploration(
             max_children=2,
-            explore_far_factor=1.15,
+            explore_far_factor=2,
             max_distance=0.3,
             max_interactions=25
         ),
@@ -123,7 +132,6 @@ def do_evaluation_run(
 
     for column_name, attribute_name in zip(column_names, dataset.ATTRIBUTES):
         num_mentioned = 0
-        num_derivable = 0
 
         num_should_be_empty_is_empty = 0
         num_should_be_empty_is_full = 0
@@ -223,15 +231,19 @@ if __name__ == "__main__":
         }
 
         # engage the extraction stage
-        aset_extraction_stage = ExtractionStage(
-            documents=aset_documents,
-            extractors=[Extractor()],
-            processors=[],  # skip the processing since it is not evaluated
-            embedding_method=ExtractionEmbeddingMethod()
-        )
-        # do not derive extractions again, but use the loaded ones
-        # skip determining values since it is not evaluated
-        aset_extraction_stage.compute_extraction_embeddings()
+        if not isfile("cache.json"):
+            aset_extraction_stage = ExtractionStage(
+                documents=aset_documents,
+                extractors=[Extractor()],
+                processors=[],  # skip the processing since it is not evaluated
+                embedding_method=ExtractionEmbeddingMethod()
+            )
+            # do not derive extractions again, but use the loaded ones
+            # skip determining values since it is not evaluated
+            aset_extraction_stage.compute_extraction_embeddings()
+
+            with open("cache.json", "w", encoding="utf-8") as file:
+                file.write(aset_extraction_stage.json_str)
 
         # max_interactions = list(range(1, 51))
         # num_examples = list(range(0, 11))
@@ -259,16 +271,13 @@ if __name__ == "__main__":
         random_seeds = [200488, 422329, 449756, 739608, 983889, 836016, 264198, 908457, 205619, 461905]
 
         # do the matching stage evaluation runs
-        results = []
         for run, random_seed in enumerate(random_seeds):
             result = do_evaluation_run(
                 run,
                 random_seed,
                 documents,
                 attribute_names,
-                column_name2attribute_name,
-                aset_extraction_stage,
-                0  # param_value
+                column_name2attribute_name
             )
 
             for attribute in dataset.ATTRIBUTES:
