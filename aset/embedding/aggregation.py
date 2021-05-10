@@ -6,6 +6,7 @@ regards to distance calculation and updating based on in-column and out-of-colum
 the JSON serialization.
 """
 import logging
+from typing import Callable
 
 import numpy as np
 from scipy.spatial.distance import cosine
@@ -14,8 +15,7 @@ from aset.core.json_serialization import Component
 from aset.core.resources import get_stanza_tokenize_pipeline, get_fasttext_embedding, get_sentence_bert, \
     get_bert_tokenizer_device
 from aset.embedding.signals import labels_as_fasttext_natural_language_embeddings, sbert_natural_language_embeddings, \
-    positions_as_relative_positions, context_with_bert_natural_language_embeddings, \
-    labels_as_sbert_natural_language_embeddings
+    positions_as_relative_positions, context_with_bert_natural_language_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +194,7 @@ class AttributeEmbeddingMethod:
     """Embedding method for embedding attributes."""
 
     embedding_method_str = "AttributeEmbeddingMethod"
+    status_callback: Callable[[float], None] or None = None
 
     def __init__(self):
         # preload the required resources
@@ -240,6 +241,7 @@ class ExtractionEmbeddingMethod:
     """Embedding method for embedding extractions."""
 
     embedding_method_str = "ExtractionEmbeddingMethod"
+    status_callback: Callable[[float], None] or None = None
 
     def __init__(self):
         # preload the required resources
@@ -251,9 +253,11 @@ class ExtractionEmbeddingMethod:
     def __eq__(self, other):
         return self.embedding_method_str == other.embedding_method_str
 
-    @staticmethod
-    def __call__(documents):
+    def __call__(self, documents):
         for i, document in enumerate(documents):
+            if i % (len(documents) // 20) == 0 and self.status_callback:
+                self.status_callback(i / len(documents))
+
             if i % (len(documents) // 5) == 0:
                 logger.info("Computing extraction embeddings {} percent done.".format(round(i / len(documents) * 100)))
 

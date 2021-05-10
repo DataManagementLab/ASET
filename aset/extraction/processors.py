@@ -1,6 +1,7 @@
 """Processors that determine the actual values of extractions."""
 import logging
 from abc import ABC, abstractmethod
+from typing import Callable
 
 from aset.core.resources import get_stanford_corenlp_pipeline
 from aset.extraction.common import Extraction
@@ -20,6 +21,8 @@ class BaseProcessor(ABC):
         """Determine the actual values of the given extractions."""
         raise NotImplementedError
 
+    status_callback: Callable[[float], None] or None = None
+
 
 class StanfordCoreNLPDateTimeProcessor(BaseProcessor):
     """Processor for datetime extractions built upon the Stanford CoreNLP library."""
@@ -35,6 +38,9 @@ class StanfordCoreNLPDateTimeProcessor(BaseProcessor):
         """Determine the actual values of the given extractions."""
 
         for i, extraction in enumerate(extractions):
+            if i % (len(extractions) // 20) == 0 and self.status_callback:
+                self.status_callback(i / len(extractions))
+
             if i % (len(extractions) // 5) == 0:
                 logger.info(f"{self.processor_str}: {round(i / len(extractions) * 100)} percent done.")
             if extraction.extraction_type_str == Extraction.datetime_extraction_type_str:
@@ -60,6 +66,9 @@ class StanfordCoreNLPNumberProcessor(BaseProcessor):
         """Determine the actual values of the given extractions."""
 
         for i, extraction in enumerate(extractions):
+            if i % (len(extractions) // 20) == 0 and self.status_callback:
+                self.status_callback(i / len(extractions))
+
             if i % (len(extractions) // 5) == 0:
                 logger.info(f"{self.processor_str}: {round(i / len(extractions) * 100)} percent done.")
             if extraction.extraction_type_str == Extraction.number_extraction_type_str:
@@ -84,6 +93,9 @@ class StanfordCoreNLPStringProcessor(BaseProcessor):
         """Determine the actual values of the given extractions."""
 
         for i, extraction in enumerate(extractions):
+            if i % (len(extractions) // 20) == 0 and self.status_callback:
+                self.status_callback(i / len(extractions))
+
             if i % (len(extractions) // 5) == 0:
                 logger.info(f"{self.processor_str}: {round(i / len(extractions) * 100)} percent done.")
             if extraction.extraction_type_str == Extraction.string_extraction_type_str:

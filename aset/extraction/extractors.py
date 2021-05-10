@@ -1,6 +1,7 @@
 """Extractors that derive extractions from documents."""
 import logging
 from abc import ABC, abstractmethod
+from typing import Callable
 
 from aset.core.resources import get_stanza_ner_pipeline, get_stanford_corenlp_pipeline
 from aset.extraction.common import Document, Extraction
@@ -20,6 +21,8 @@ class BaseExtractor(ABC):
     def __call__(self, documents: [Document]):
         """Derive extractions from the given documents."""
         raise NotImplementedError
+
+    status_callback: Callable[[float], None] or None = None
 
 
 class StanzaExtractor(BaseExtractor):
@@ -65,8 +68,13 @@ class StanzaExtractor(BaseExtractor):
     def __call__(self, documents: [Document]):
         """Derive extractions from the given documents."""
 
+        print("Called!", flush=True)
+
         # run the stanza library
         for i, document in enumerate(documents):
+            if i % (len(documents) // 20) == 0 and self.status_callback:
+                self.status_callback(i / len(documents))
+
             if i % (len(documents) // 5) == 0:
                 logger.info(f"{self.extractor_str}: {round(i / len(documents) * 100)} percent done.")
 
@@ -141,6 +149,9 @@ class StanfordCoreNLPExtractor(BaseExtractor):
 
         # run the Stanford CoreNLP library
         for i, document in enumerate(documents):
+            if i % (len(documents) // 20) == 0 and self.status_callback:
+                self.status_callback(i / len(documents))
+
             if i % (len(documents) // 5) == 0:
                 logger.info(f"{self.extractor_str}: {round(i / len(documents) * 100)} percent done.")
 
