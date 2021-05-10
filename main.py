@@ -1,9 +1,9 @@
 """
 The main entry point into Ad-hoc Structured Exploration of Text Collections (ASET).
 
-Run this script to execute ASET. The documents from the document collection must be stored in the 'input' folder as
-'*.txt' files. ASET will then ask you to specify the names of the attributes. The output will be stored in the 'output'
-folder as a '.csv' file.
+Run this script to execute ASET in the command line. The documents from the document collection must be stored in the
+'input' folder as '*.txt' files. ASET will then ask you to specify the names of the attributes. The output will be
+stored in the 'output' folder as a '.csv' file.
 
 ASET extracts information nuggets (extractions) from a collection of documents and matches them to a list of
 user-specified attributes. Each document corresponds with a single row in the resulting table.
