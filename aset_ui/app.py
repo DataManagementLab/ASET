@@ -4,6 +4,7 @@ import logging
 
 from PyQt5.QtWidgets import QApplication
 
+from aset.core.resources import close_all_resources
 from aset_ui.mainwindow import MainWindow
 
 logger = logging.getLogger(__name__)
@@ -23,4 +24,8 @@ def run(args: [str]):
     window.show()
     logger.debug("Initialized the application.")
 
-    return app.exec_()
+    try:
+        return app.exec_()
+    except BaseException as exception:
+        close_all_resources()
+        raise exception

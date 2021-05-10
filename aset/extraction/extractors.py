@@ -68,8 +68,6 @@ class StanzaExtractor(BaseExtractor):
     def __call__(self, documents: [Document]):
         """Derive extractions from the given documents."""
 
-        print("Called!", flush=True)
-
         # run the stanza library
         for i, document in enumerate(documents):
             if i % (len(documents) // 20) == 0 and self.status_callback:

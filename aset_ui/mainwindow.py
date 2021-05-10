@@ -1,11 +1,12 @@
 """Main window of the application."""
 import logging
 
-from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QFormLayout
+from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QHBoxLayout
 
 from aset.core.resources import close_all_resources
 from aset_ui.offlinephase import OfflinePhaseWindow
 from aset_ui.onlinephase import OnlinePhaseWindow
+from aset_ui.util import HEADER_FONT, SUBHEADER_FONT, LABEL_FONT
 
 logger = logging.getLogger(__name__)
 
@@ -23,28 +24,54 @@ class MainWindow(QMainWindow):
         self.central_layout = QVBoxLayout()
 
         self.header = QLabel("ASET: Ad-hoc Structured Exploration of Text Collections")
-        header_font = self.header.font()
-        header_font.setPointSize(20)
-        header_font.setWeight(100)
-        self.header.setFont(header_font)
+        self.header.setFont(HEADER_FONT)
         self.central_layout.addWidget(self.header)
 
-        self.buttons_form_widget = QWidget()
-        self.buttons_form_layout = QFormLayout()
-        self.buttons_form_layout.setContentsMargins(0, 0, 0, 0)
+        self.columns_widget = QWidget()
+        self.columns_layout = QHBoxLayout()
 
-        self.offline_phase_label = QLabel("Choose a folder containing a document collection to preprocess:")
-        self.offline_phase_button = QPushButton("Offline Preprocessing Phase")
-        self.offline_phase_button.clicked.connect(self.start_offline_phase)
-        self.buttons_form_layout.addRow(self.offline_phase_label, self.offline_phase_button)
+        # left column
+        self.left_column_widget = QWidget()
+        self.left_column_layout = QVBoxLayout()
 
-        self.online_phase_label = QLabel("Choose a preprocessed document collection and match it to a query:")
-        self.online_phase_button = QPushButton("Online Matching Phase")
-        self.online_phase_button.clicked.connect(self.start_online_phase)
-        self.buttons_form_layout.addRow(self.online_phase_label, self.online_phase_button)
+        self.left_subheader = QLabel("1. Offline Preprocessing Phase")
+        self.left_subheader.setFont(SUBHEADER_FONT)
+        self.left_column_layout.addWidget(self.left_subheader)
 
-        self.buttons_form_widget.setLayout(self.buttons_form_layout)
-        self.central_layout.addWidget(self.buttons_form_widget)
+        self.left_label = QLabel("Choose a directory containing a document collection and preprocess it.")
+        self.left_label.setFont(LABEL_FONT)
+        self.left_label.setWordWrap(True)
+        self.left_column_layout.addWidget(self.left_label)
+
+        self.left_button = QPushButton("Start Preprocessing Phase")
+        self.left_button.clicked.connect(self.start_offline_phase)
+        self.left_column_layout.addWidget(self.left_button)
+
+        self.left_column_widget.setLayout(self.left_column_layout)
+        self.columns_layout.addWidget(self.left_column_widget)
+
+        # right column
+        self.right_column_widget = QWidget()
+        self.right_column_layout = QVBoxLayout()
+
+        self.right_subheader = QLabel("2. Online Matching Phase")
+        self.right_subheader.setFont(SUBHEADER_FONT)
+        self.right_column_layout.addWidget(self.right_subheader)
+
+        self.right_label = QLabel("Open a preprocessed document collection and match it to some attributes.")
+        self.right_label.setFont(LABEL_FONT)
+        self.right_label.setWordWrap(True)
+        self.right_column_layout.addWidget(self.right_label)
+
+        self.right_button = QPushButton("Start Matching Phase")
+        self.right_button.clicked.connect(self.start_online_phase)
+        self.right_column_layout.addWidget(self.right_button)
+
+        self.right_column_widget.setLayout(self.right_column_layout)
+        self.columns_layout.addWidget(self.right_column_widget)
+
+        self.columns_widget.setLayout(self.columns_layout)
+        self.central_layout.addWidget(self.columns_widget)
 
         self.central_widget.setLayout(self.central_layout)
         self.setCentralWidget(self.central_widget)

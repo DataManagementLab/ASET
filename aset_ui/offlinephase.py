@@ -13,6 +13,7 @@ from aset.extraction.extractionstage import ExtractionStage
 from aset.extraction.extractors import StanzaExtractor
 from aset.extraction.processors import StanfordCoreNLPDateTimeProcessor, StanfordCoreNLPNumberProcessor, \
     StanfordCoreNLPStringProcessor
+from aset_ui.util import SUBHEADER_FONT, HEADER_FONT, LABEL_FONT, LABEL_FONT_BOLD, LABEL_FONT_ITALIC
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,9 @@ logger = logging.getLogger(__name__)
 class OfflinePhaseWorker(QObject):
     """Worker that executes the offline phase."""
 
-    finished = pyqtSignal()
-    progress = pyqtSignal(str, float)
+    finished: pyqtSignal = pyqtSignal()
+    progress: pyqtSignal = pyqtSignal(float)
+    next: pyqtSignal = pyqtSignal()
 
     def __init__(self, source_path: str, target_path: str):
         """
@@ -41,29 +43,27 @@ class OfflinePhaseWorker(QObject):
 
         # load the document collection
         logger.info(f"Load document collection from '{self.source_path}'.")
+        self.next.emit()
 
-        self.progress.emit("Loading document collection...", 0.)
+        self.progress.emit(-1.)
 
         file_paths = glob.glob(self.source_path + "/*.txt")
         documents = []
         for ix, file_path in enumerate(file_paths):
             if ix % 10 == 0:
-                self.progress.emit("Loading document collection...", ix / len(file_paths))
+                self.progress.emit(ix / len(file_paths))
             with open(file_path, encoding="utf-8") as file:
                 documents.append(Document(file.read()))
 
-        self.progress.emit("Loading document collection...", 1.)
+        self.next.emit()
 
         # load the extraction stage
         logger.info("Load the extraction stage.")
-        self.progress.emit("Loading extraction stage (extractors)...", 0.)
+        self.progress.emit(-1.)
 
         extractors = [StanzaExtractor()]
         for ix, extractor in enumerate(extractors):
-            extractor.status_callback = lambda x: self.progress.emit(
-                f"Deriving extractions ({ix}/{len(extractors)})...", x
-            )
-        self.progress.emit("Loading extraction stage (processors)...", 0.2)
+            extractor.status_callback = lambda x, a=ix, b=len(extractors): self.progress.emit((x + a) / b)
 
         processors = [
             StanfordCoreNLPDateTimeProcessor(),
@@ -71,15 +71,10 @@ class OfflinePhaseWorker(QObject):
             StanfordCoreNLPStringProcessor()
         ]
         for ix, processor in enumerate(processors):
-            processor.status_callback = lambda x: self.progress.emit(
-                f"Determining values ({ix}/{len(processors)})...", x
-            )
-        self.progress.emit("Loading extraction stage (extraction embedding method .. 'may take a while')...", 0.4)
+            processor.status_callback = lambda x, a=ix, b=len(processors): self.progress.emit((x + a) / b)
 
         embedding_method = ExtractionEmbeddingMethod()
-        embedding_method.status_callback = lambda x: self.progress.emit(
-            "Computing extraction embeddings...", x
-        )
+        embedding_method.status_callback = lambda x: self.progress.emit(x)
 
         self.extraction_stage = ExtractionStage(
             documents=documents,
@@ -87,33 +82,38 @@ class OfflinePhaseWorker(QObject):
             processors=processors,
             embedding_method=embedding_method
         )
-        self.progress.emit("Loading extraction stage...", 1.)
+        self.next.emit()
 
         # derive extractions
         logger.info("Derive extractions.")
-        self.progress.emit(f"Deriving extractions (0/{len(extractors)})...", 0.)
+        self.progress.emit(0.)
         self.extraction_stage.derive_extractions()
-        self.progress.emit(f"Deriving extractions ({len(extractors)}/{len(extractors)})...", 1.)
+        self.progress.emit(1.)
+        self.next.emit()
 
         # determine values
         logger.info("Determine values.")
-        self.progress.emit(f"Determining values (0/{len(processors)})...", 0.)
+        self.progress.emit(0.)
         self.extraction_stage.determine_values()
-        self.progress.emit(f"Determining values ({len(processors)}/{len(processors)})...", 1.)
+        self.progress.emit(1.)
+        self.next.emit()
 
         # compute extraction embeddings
         logger.info("Compute extraction embeddings.")
-        self.progress.emit("Computing extraction embeddings...", 0.)
+        self.progress.emit(0.)
         self.extraction_stage.compute_extraction_embeddings()
-        self.progress.emit("Computing extraction embeddings...", 1.)
+        self.progress.emit(1.)
+        self.next.emit()
 
         # store the preprocessed document collection
         logger.info(f"Store preprocessed document collection to {self.target_path}")
-        self.progress.emit("Storing preprocessed document collection...", 0.)
+        self.progress.emit(-1.)
         with open(self.target_path, "w", encoding="utf-8") as file:
             file.write(self.extraction_stage.json_str)
-        self.progress.emit("Storing preprocessed document collection...", 1.)
+        print("...")
+        self.next.emit()
 
+        logger.info("All done.")
         self.finished.emit()
 
 
@@ -126,18 +126,15 @@ class SourceDirectoryWidget(QWidget):
 
         # set up the widgets
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(0, 10, 0, 10)
+        self.layout.setContentsMargins(0, 10, 0, 0)
 
-        self.header = QLabel("Choose from where to load the document collection:")
-        header_font = self.header.font()
-        header_font.setPointSize(11)
-        header_font.setWeight(60)
-        self.header.setFont(header_font)
-        self.layout.addWidget(self.header)
+        self.subheader = QLabel("1. Choose from where to load the document collection.")
+        self.subheader.setFont(SUBHEADER_FONT)
+        self.layout.addWidget(self.subheader)
 
-        self.label = QLabel(
-            "ASET expects the document collection to be a directory that contains one .txt file of raw text for each document."
-        )
+        self.label = QLabel("ASET expects the document collection to be a directory that contains one .txt file of "
+                            "raw text for each document.")
+        self.label.setFont(LABEL_FONT)
         self.label.setWordWrap(True)
         self.layout.addWidget(self.label)
 
@@ -158,14 +155,19 @@ class SourceDirectoryWidget(QWidget):
         self.hbox_widget.setLayout(self.hbox_layout)
         self.layout.addWidget(self.hbox_widget)
 
+        self.feedback_label = QLabel(" ")
+        self.feedback_label.setFont(LABEL_FONT_ITALIC)
+        self.feedback_label.setStyleSheet("color: red")
+        self.layout.addWidget(self.feedback_label)
+
         self.setLayout(self.layout)
 
     def button_pressed(self, _):
         """Select directory button pressed."""
         logger.info("Select document collection directory")
-        directory_path = str(
-            QFileDialog.getExistingDirectory(self, "Choose from where to load the document collection"))
-        self.edit.setText(directory_path)
+        path = str(QFileDialog.getExistingDirectory(self, "Choose from where to load the document collection"))
+        self.edit.setText(path)
+        self.parent.check_source_directory()
 
 
 class TargetFileWidget(QWidget):
@@ -177,18 +179,14 @@ class TargetFileWidget(QWidget):
 
         # set up the widgets
         self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(0, 10, 0, 10)
+        self.layout.setContentsMargins(0, 10, 0, 0)
 
-        self.header = QLabel("Choose where to store the preprocessed document collection:")
-        header_font = self.header.font()
-        header_font.setPointSize(11)
-        header_font.setWeight(60)
-        self.header.setFont(header_font)
-        self.layout.addWidget(self.header)
+        self.subheader = QLabel("2. Choose where to store the preprocessed document collection.")
+        self.subheader.setFont(SUBHEADER_FONT)
+        self.layout.addWidget(self.subheader)
 
-        self.label = QLabel(
-            "ASET stores the preprocessed document collection as a json file."
-        )
+        self.label = QLabel("ASET stores the preprocessed document collection as a json file.")
+        self.label.setFont(LABEL_FONT)
         self.label.setWordWrap(True)
         self.layout.addWidget(self.label)
 
@@ -209,14 +207,89 @@ class TargetFileWidget(QWidget):
         self.hbox_widget.setLayout(self.hbox_layout)
         self.layout.addWidget(self.hbox_widget)
 
+        self.feedback_label = QLabel(" ")
+        self.feedback_label.setFont(LABEL_FONT_ITALIC)
+        self.feedback_label.setStyleSheet("color: red")
+        self.layout.addWidget(self.feedback_label)
+
         self.setLayout(self.layout)
 
     def button_pressed(self, _):
         """Select file button pressed."""
         logger.info("Select preprocessed document collection file.")
-        file_path = str(
-            QFileDialog.getSaveFileName(self, "Choose where to store the preprocessed document collection")[0])
-        self.edit.setText(file_path)
+        path = str(QFileDialog.getSaveFileName(self, "Choose where to store the preprocessed document collection")[0])
+        self.edit.setText(path)
+        self.parent.check_target_file()
+
+
+class PreprocessingWidget(QWidget):
+    """Widget to start and monitor the preprocessing."""
+
+    def __init__(self, parent):
+        super(PreprocessingWidget, self).__init__()
+        self.parent = parent
+        self.current_step = -1
+
+        # set up the widgets
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 10, 0, 10)
+
+        self.subheader = QLabel("3. Preprocess the document collection.")
+        self.subheader.setFont(SUBHEADER_FONT)
+        self.layout.addWidget(self.subheader)
+
+        self.steps_widget = QWidget()
+        self.steps_layout = QVBoxLayout()
+        self.steps_layout.setContentsMargins(30, 5, 0, 10)
+
+        self.steps = [
+            QLabel("- Load document collection."),
+            QLabel("- Load extraction stage."),
+            QLabel("- Derive extractions."),
+            QLabel("- Determine extraction values."),
+            QLabel("- Compute extraction embeddings."),
+            QLabel("- Store preprocessed extraction stage.")
+        ]
+        for label in self.steps:
+            label.setFont(LABEL_FONT)
+            self.steps_layout.addWidget(label)
+
+        self.steps_widget.setLayout(self.steps_layout)
+        self.layout.addWidget(self.steps_widget)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.layout.addWidget(self.progress_bar)
+
+        self.start_button = QPushButton()
+        self.start_button.setText("Start Preprocessing")
+        self.start_button.clicked.connect(self.parent.start_preprocessing)
+        self.layout.addWidget(self.start_button)
+
+        self.setLayout(self.layout)
+
+    def next(self):
+        if self.current_step >= 0:
+            self.steps[self.current_step].setFont(LABEL_FONT)
+        else:
+            self.steps[-1].setFont(LABEL_FONT)
+
+        self.current_step += 1
+
+        if self.current_step < len(self.steps):
+            self.steps[self.current_step].setFont(LABEL_FONT_BOLD)
+        else:
+            self.current_step = -1
+
+    def progress(self, fraction_done: float):
+        if fraction_done < 0:
+            self.progress_bar.setMinimum(0)
+            self.progress_bar.setMaximum(0)
+        else:
+            self.progress_bar.setMinimum(0)
+            self.progress_bar.setMaximum(100)
+            self.progress_bar.setValue(int(fraction_done * 100))
 
 
 class OfflinePhaseWindow(QWidget):
@@ -233,13 +306,11 @@ class OfflinePhaseWindow(QWidget):
 
         # set up the widgets
         self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(20, 15, 20, 15)
 
         # header
         self.header = QLabel("ASET: Offline Preprocessing Phase")
-        header_font = self.header.font()
-        header_font.setPointSize(20)
-        header_font.setWeight(100)
-        self.header.setFont(header_font)
+        self.header.setFont(HEADER_FONT)
         self.layout.addWidget(self.header)
 
         # select document collection directory
@@ -250,20 +321,9 @@ class OfflinePhaseWindow(QWidget):
         self.target_file_widget = TargetFileWidget(self)
         self.layout.addWidget(self.target_file_widget)
 
-        # start preprocessing button
-        self.start_preprocessing_button = QPushButton()
-        self.start_preprocessing_button.setText("Start Preprocessing")
-        self.start_preprocessing_button.clicked.connect(self.start_preprocessing)
-        self.layout.addWidget(self.start_preprocessing_button)
-
-        # preprocessing progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.layout.addWidget(self.progress_bar)
-
-        # feedback label
-        self.feedback_label = QLabel(" ")
-        self.layout.addWidget(self.feedback_label)
+        # preprocessing button and monitoring
+        self.preprocessing_widget = PreprocessingWidget(self)
+        self.layout.addWidget(self.preprocessing_widget)
 
         self.setLayout(self.layout)
         self.layout.addStretch()
@@ -274,10 +334,12 @@ class OfflinePhaseWindow(QWidget):
         logger.debug("Initialized offline phase window.")
 
     def source_directory_edit_changed(self, _):
-        self.feedback_label.setText(" ")
+        self.source_directory_widget.feedback_label.setStyleSheet("color: black")
+        self.source_directory_widget.feedback_label.setText(" ")
 
     def target_file_edit_changed(self, _):
-        self.feedback_label.setText(" ")
+        self.target_file_widget.feedback_label.setStyleSheet("color: black")
+        self.target_file_widget.feedback_label.setText(" ")
 
     def closeEvent(self, _):
         """When window closed, go back to parent."""
@@ -292,7 +354,8 @@ class OfflinePhaseWindow(QWidget):
         # check that the path leads to a directory
         if not os.path.isdir(directory_path):
             logger.error("The provided source path is invalid!")
-            self.feedback_label.setText("The provided source path is invalid!")
+            self.source_directory_widget.feedback_label.setStyleSheet("color: red")
+            self.source_directory_widget.feedback_label.setText("The provided source path is invalid!")
             return False
 
         file_paths = glob.glob(directory_path + "/*.txt")
@@ -301,11 +364,13 @@ class OfflinePhaseWindow(QWidget):
         # check that there are valid documents
         if num_documents == 0:
             logger.error("There are no valid documents in the directory!")
-            self.feedback_label.setText(f"There are no valid documents in the directory!")
+            self.source_directory_widget.feedback_label.setStyleSheet("color: red")
+            self.source_directory_widget.feedback_label.setText(f"There are no valid documents in the directory!")
             return False
 
         logger.info(f"Found {num_documents} documents in the directory.")
-        self.feedback_label.setText(f"Found {num_documents} documents.")
+        self.source_directory_widget.feedback_label.setStyleSheet("color: black")
+        self.source_directory_widget.feedback_label.setText(f"Found {num_documents} documents.")
         return True
 
     def check_target_file(self):
@@ -316,14 +381,23 @@ class OfflinePhaseWindow(QWidget):
         # check that the path without the final part leads to a folder
         if not os.path.isdir("/".join(pathlib.Path(file_path).parts[:-1])):
             logger.error("The provided target file path is invalid!")
-            self.feedback_label.setText("The provided target file path is invalid!")
+            self.target_file_widget.feedback_label.setStyleSheet("color: red")
+            self.target_file_widget.feedback_label.setText("The provided target file path is invalid!")
             return False
 
-        return True
+        # check that the entire path is not a folder
+        if os.path.isdir(file_path):
+            logger.error("The provided target file path is invalid!")
+            self.target_file_widget.feedback_label.setStyleSheet("color: red")
+            self.target_file_widget.feedback_label.setText("The provided target file path is invalid!")
+            return False
 
-    def preprocessing_progress(self, description: str, fraction_done: float):
-        self.feedback_label.setText(description)
-        self.progress_bar.setValue(int(fraction_done * 100))
+        if os.path.isfile(file_path):
+            logger.info("Preprocessed document collection will overwrite existing file.")
+            self.target_file_widget.feedback_label.setStyleSheet("color: black")
+            self.target_file_widget.feedback_label.setText("Existing file will be overwritten.")
+
+        return True
 
     def preprocessing_finished(self):
         # update the UI
@@ -331,10 +405,11 @@ class OfflinePhaseWindow(QWidget):
         self.source_directory_widget.button.setEnabled(True)
         self.target_file_widget.edit.setEnabled(True)
         self.target_file_widget.button.setEnabled(True)
-        self.start_preprocessing_button.setEnabled(True)
+        self.preprocessing_widget.start_button.setEnabled(True)
 
-        self.progress_bar.setValue(100)
-        self.feedback_label.setText("Preprocessing document collection finished!")
+        self.preprocessing_widget.progress_bar.setMinimum(0)
+        self.preprocessing_widget.progress_bar.setMaximum(100)
+        self.preprocessing_widget.progress_bar.setValue(100)
 
     def start_preprocessing(self, _):
         """Start preprocessing if the directory and file are valid."""
@@ -353,7 +428,7 @@ class OfflinePhaseWindow(QWidget):
         self.source_directory_widget.button.setEnabled(False)
         self.target_file_widget.edit.setEnabled(False)
         self.target_file_widget.button.setEnabled(False)
-        self.start_preprocessing_button.setEnabled(False)
+        self.preprocessing_widget.start_button.setEnabled(False)
 
         # start preprocessing
         self.offline_phase_worker = OfflinePhaseWorker(
@@ -369,8 +444,8 @@ class OfflinePhaseWindow(QWidget):
         self.offline_phase_worker.finished.connect(self.worker_thread.quit)
         self.offline_phase_worker.finished.connect(self.worker_thread.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-        self.offline_phase_worker.progress.connect(self.preprocessing_progress)
 
-        print("Start thread.")
+        self.offline_phase_worker.next.connect(self.preprocessing_widget.next)
+        self.offline_phase_worker.progress.connect(self.preprocessing_widget.progress)
+
         self.worker_thread.start()
-        print("Thread started.")
