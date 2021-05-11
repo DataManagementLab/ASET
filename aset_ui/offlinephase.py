@@ -245,10 +245,10 @@ class PreprocessingWidget(QWidget):
         self.steps = [
             QLabel("- Load document collection."),
             QLabel("- Load extraction stage."),
-            QLabel("- Derive extractions."),
-            QLabel("- Determine extraction values."),
-            QLabel("- Compute extraction embeddings."),
-            QLabel("- Store preprocessed extraction stage.")
+            QLabel("- Extract information nuggets."),
+            QLabel("- Normalize information nuggets."),
+            QLabel("- Compute information nugget embeddings."),
+            QLabel("- Store preprocessed document collection.")
         ]
         for label in self.steps:
             label.setFont(LABEL_FONT)

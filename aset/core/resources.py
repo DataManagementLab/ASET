@@ -160,7 +160,11 @@ def get_fasttext_embedding():
         with open(path, encoding="utf-8", newline="\n", errors="ignore") as file:
             _ = file.readline()  # skip number of words, dimension
             _fasttext_embedding = {}
+            n = 0
             for line in file:
+                n += 1
+                if n == 80000:
+                    break
                 parts = line.rstrip().split(" ")
                 _fasttext_embedding[parts[0]] = np.array([float(part) for part in parts[1:]])
 
