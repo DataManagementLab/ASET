@@ -144,7 +144,6 @@ class SourceDirectoryWidget(QWidget):
 
         self.edit = QLineEdit()
         self.edit.setPlaceholderText("Select Directory")
-        self.edit.setText(r"C:\Users\micha\Code\ASET\datasets\aviation\raw-documents")
         self.edit.textChanged.connect(self.parent.source_directory_edit_changed)
         self.hbox_layout.addWidget(self.edit)
 
@@ -166,8 +165,9 @@ class SourceDirectoryWidget(QWidget):
         """Select directory button pressed."""
         logger.info("Select document collection directory")
         path = str(QFileDialog.getExistingDirectory(self, "Choose from where to load the document collection"))
-        self.edit.setText(path)
-        self.parent.check_source_directory()
+        if path != "":
+            self.edit.setText(path)
+            self.parent.check_source_directory()
 
 
 class TargetFileWidget(QWidget):
@@ -185,7 +185,7 @@ class TargetFileWidget(QWidget):
         self.subheader.setFont(SUBHEADER_FONT)
         self.layout.addWidget(self.subheader)
 
-        self.label = QLabel("ASET stores the preprocessed document collection as a json file.")
+        self.label = QLabel("ASET stores the preprocessed document collection as a .json file.")
         self.label.setFont(LABEL_FONT)
         self.label.setWordWrap(True)
         self.layout.addWidget(self.label)
@@ -196,7 +196,6 @@ class TargetFileWidget(QWidget):
 
         self.edit = QLineEdit()
         self.edit.setPlaceholderText("Select File")
-        self.edit.setText(r"C:/Users/micha/Code/ASET/datasets/aviation/out.json")
         self.edit.textChanged.connect(self.parent.target_file_edit_changed)
         self.hbox_layout.addWidget(self.edit)
 
@@ -218,8 +217,9 @@ class TargetFileWidget(QWidget):
         """Select file button pressed."""
         logger.info("Select preprocessed document collection file.")
         path = str(QFileDialog.getSaveFileName(self, "Choose where to store the preprocessed document collection")[0])
-        self.edit.setText(path)
-        self.parent.check_target_file()
+        if path != "":
+            self.edit.setText(path)
+            self.parent.check_target_file()
 
 
 class PreprocessingWidget(QWidget):
@@ -401,10 +401,8 @@ class OfflinePhaseWindow(QWidget):
 
     def preprocessing_finished(self):
         # update the UI
-        self.source_directory_widget.edit.setEnabled(True)
-        self.source_directory_widget.button.setEnabled(True)
-        self.target_file_widget.edit.setEnabled(True)
-        self.target_file_widget.button.setEnabled(True)
+        self.source_directory_widget.setEnabled(True)
+        self.target_file_widget.setEnabled(True)
         self.preprocessing_widget.start_button.setEnabled(True)
 
         self.preprocessing_widget.progress_bar.setMinimum(0)
@@ -424,10 +422,8 @@ class OfflinePhaseWindow(QWidget):
             return
 
         # update the UI
-        self.source_directory_widget.edit.setEnabled(False)
-        self.source_directory_widget.button.setEnabled(False)
-        self.target_file_widget.edit.setEnabled(False)
-        self.target_file_widget.button.setEnabled(False)
+        self.source_directory_widget.setEnabled(False)
+        self.target_file_widget.setEnabled(False)
         self.preprocessing_widget.start_button.setEnabled(False)
 
         # start preprocessing
@@ -442,7 +438,7 @@ class OfflinePhaseWindow(QWidget):
         self.worker_thread.started.connect(self.offline_phase_worker.run)
         self.offline_phase_worker.finished.connect(self.preprocessing_finished)
         self.offline_phase_worker.finished.connect(self.worker_thread.quit)
-        self.offline_phase_worker.finished.connect(self.worker_thread.deleteLater)
+        self.offline_phase_worker.finished.connect(self.offline_phase_worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
         self.offline_phase_worker.next.connect(self.preprocessing_widget.next)
