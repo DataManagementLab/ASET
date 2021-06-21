@@ -276,7 +276,7 @@ class DFSExploration(BaseStrategy):
                 # find a root
                 root_iteration = 1
                 while not queue and num_interactions < self.max_interactions:
-                    temperature = 0.01 * (root_iteration ** 2)
+                    temperature = 0.001 * (root_iteration ** 2)
                     weights = [(1 - distance) / temperature for _, _, distance in remaining]
                     softmax_weights = softmax(weights)
 
