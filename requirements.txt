@@ -8,3 +8,4 @@ sentence-transformers==0.4.1.2
 stanza==1.2
 pytest==6.2.2
 pytest-xdist==2.2.1
+PyQt5==5.15.4
