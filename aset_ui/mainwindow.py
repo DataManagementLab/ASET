@@ -1,11 +1,10 @@
-"""Main window of the application."""
 import logging
 
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QHBoxLayout
 
 from aset.core.resources import close_all_resources
 from aset_ui.offlinephase import OfflinePhaseWindow
-from aset_ui.onlinephase.window import OnlinePhaseWindow
+from aset_ui.onlinephase import OnlinePhaseWindow
 from aset_ui.util import HEADER_FONT, SUBHEADER_FONT, LABEL_FONT
 
 logger = logging.getLogger(__name__)

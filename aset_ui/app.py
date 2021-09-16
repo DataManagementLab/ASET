@@ -1,5 +1,3 @@
-"""Main entry-point into the PyQt application."""
-
 import logging
 
 from PyQt5.QtWidgets import QApplication

@@ -1,4 +1,3 @@
-"""Offline Phase: Preprocess a document collection."""
 import glob
 import logging
 import os
@@ -43,26 +42,31 @@ class OfflinePhaseWorker(QObject):
 
         # load the document collection
         logger.info(f"Load document collection from '{self.source_path}'.")
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
+        # noinspection PyUnresolvedReferences
         self.progress.emit(-1.)
 
         file_paths = glob.glob(self.source_path + "/*.txt")
         documents = []
         for ix, file_path in enumerate(file_paths):
             if ix % 10 == 0:
+                # noinspection PyUnresolvedReferences
                 self.progress.emit(ix / len(file_paths))
             with open(file_path, encoding="utf-8") as file:
                 documents.append(Document(file.read()))
-
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
         # load the extraction stage
         logger.info("Load the extraction stage.")
+        # noinspection PyUnresolvedReferences
         self.progress.emit(-1.)
 
         extractors = [StanzaExtractor()]
         for ix, extractor in enumerate(extractors):
+            # noinspection PyUnresolvedReferences
             extractor.status_callback = lambda x, a=ix, b=len(extractors): self.progress.emit((x + a) / b)
 
         processors = [
@@ -71,9 +75,11 @@ class OfflinePhaseWorker(QObject):
             StanfordCoreNLPStringProcessor()
         ]
         for ix, processor in enumerate(processors):
+            # noinspection PyUnresolvedReferences
             processor.status_callback = lambda x, a=ix, b=len(processors): self.progress.emit((x + a) / b)
 
         embedding_method = ExtractionEmbeddingMethod()
+        # noinspection PyUnresolvedReferences
         embedding_method.status_callback = lambda x: self.progress.emit(x)
 
         self.extraction_stage = ExtractionStage(
@@ -82,38 +88,51 @@ class OfflinePhaseWorker(QObject):
             processors=processors,
             embedding_method=embedding_method
         )
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
         # derive extractions
         logger.info("Derive extractions.")
+        # noinspection PyUnresolvedReferences
         self.progress.emit(0.)
         self.extraction_stage.derive_extractions()
+        # noinspection PyUnresolvedReferences
         self.progress.emit(1.)
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
         # determine values
         logger.info("Determine values.")
+        # noinspection PyUnresolvedReferences
         self.progress.emit(0.)
         self.extraction_stage.determine_values()
+        # noinspection PyUnresolvedReferences
         self.progress.emit(1.)
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
         # compute extraction embeddings
         logger.info("Compute extraction embeddings.")
+        # noinspection PyUnresolvedReferences
         self.progress.emit(0.)
         self.extraction_stage.compute_extraction_embeddings()
+        # noinspection PyUnresolvedReferences
         self.progress.emit(1.)
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
         # store the preprocessed document collection
         logger.info(f"Store preprocessed document collection to {self.target_path}")
+        # noinspection PyUnresolvedReferences
         self.progress.emit(-1.)
         with open(self.target_path, "w", encoding="utf-8") as file:
             file.write(self.extraction_stage.json_str)
         print("...")
+        # noinspection PyUnresolvedReferences
         self.next.emit()
 
         logger.info("All done.")
+        # noinspection PyUnresolvedReferences
         self.finished.emit()
 
 
@@ -345,6 +364,7 @@ class OfflinePhaseWindow(QWidget):
         """When window closed, go back to parent."""
         logger.info("Close offline phase window.")
         self.parent.show()
+        self.deleteLater()
 
     def check_source_directory(self):
         """Check if the source directory path is valid."""
@@ -436,12 +456,17 @@ class OfflinePhaseWindow(QWidget):
         self.offline_phase_worker.moveToThread(self.worker_thread)
 
         self.worker_thread.started.connect(self.offline_phase_worker.run)
+        # noinspection PyUnresolvedReferences
         self.offline_phase_worker.finished.connect(self.preprocessing_finished)
+        # noinspection PyUnresolvedReferences
         self.offline_phase_worker.finished.connect(self.worker_thread.quit)
+        # noinspection PyUnresolvedReferences
         self.offline_phase_worker.finished.connect(self.offline_phase_worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
 
+        # noinspection PyUnresolvedReferences
         self.offline_phase_worker.next.connect(self.preprocessing_widget.next)
+        # noinspection PyUnresolvedReferences
         self.offline_phase_worker.progress.connect(self.preprocessing_widget.progress)
 
         self.worker_thread.start()

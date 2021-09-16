@@ -1,27 +1,31 @@
 # ASET: Ad-hoc Structured Exploration of Text Collections
 
-This is the home of the **ASET**.
-
 ![ASET Pipeline](ASET_Pipeline.png)
 
-ASET extracts information nuggets (extractions) from a collection of documents and matches them to a list of user-specified attributes. Each document corresponds with a single row in the resulting table.
+ASET extracts information nuggets (extractions) from a collection of documents and matches them to a list of
+user-specified attributes. Each document corresponds with a single row in the resulting table.
 
 Follow the steps below to prepare the project.
 
-Copy your documents into `input` as `*.txt` files and run `run.py` to start the program. The output will be saved in the `output` directory as a `*.csv` file.
+Copy your documents into `input` as `*.txt` files and run `main.py` to start the program. The output will be saved in
+the `output` directory as a `*.csv` file.
+
+Alternatively, you may start the GUI by running `main_ui.py`.
 
 ## Repository Structure
+
 * `aset` ASET implementation
+* `aset_ui` ASET GUI implementation
 * `datasets` evaluation data sets
 * `input` documents to be processed
 * `output` resulting output
+* `paper_experiments` code to re-run the experiments
 * `results` evaluation results
-* `paper_experiments` code to re-run the experiments from the paper
 
 ## Data Sets
 The evaluation scripts use multiple data sets to evaluate the system.
 
-* The **aviation data set** consists of the executive summaries from the NTSB Aviation Accident Reports.
+* The **aviation data set** consists of executive summaries from the NTSB Aviation Accident Reports.
 * The **corona data set** consists of summaries of the RKI's daily reports about the Covid-19 situation in Germany.
 
 For each data set, there is a `handler` module that is meant to access the data set. The annotated documents of the data set are stored as `*.json` files in the `documents` folder. The raw documents are stored as `*.txt` files in the `raw-documents` folder.
