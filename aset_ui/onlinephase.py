@@ -347,6 +347,9 @@ class MatchingStatusWidget(QWidget):
             self._progress_bar.setValue(int(fraction_done * 100))
 
 
+########################################################################################################################
+# interactive matching
+########################################################################################################################
 class InteractiveMatchingWindow(QWidget):
     """Window for the interactive matching."""
 
@@ -437,6 +440,9 @@ class InteractiveMatchingWindow(QWidget):
         self.deleteLater()
 
 
+########################################################################################################################
+# worker thread
+########################################################################################################################
 class OnlinePhaseWorker(QObject):
     """Worker that executes the online phase."""
 
@@ -569,6 +575,9 @@ class OnlinePhaseWorker(QObject):
         self.matching_finished_to_ui.emit()
 
 
+########################################################################################################################
+# online phase window
+########################################################################################################################
 class OnlinePhaseWindow(QWidget):
     """Window of the online phase."""
 

@@ -17,6 +17,9 @@ from aset_ui.util import SUBHEADER_FONT, HEADER_FONT, LABEL_FONT, LABEL_FONT_BOL
 logger = logging.getLogger(__name__)
 
 
+########################################################################################################################
+# worker thread
+########################################################################################################################
 class OfflinePhaseWorker(QObject):
     """Worker that executes the offline phase."""
 
@@ -136,6 +139,9 @@ class OfflinePhaseWorker(QObject):
         self.finished.emit()
 
 
+########################################################################################################################
+# source and target file selection
+########################################################################################################################
 class SourceDirectoryWidget(QWidget):
     """Widget to select the source directory."""
 
@@ -241,6 +247,9 @@ class TargetFileWidget(QWidget):
             self.parent.check_target_file()
 
 
+########################################################################################################################
+# preprocessing
+########################################################################################################################
 class PreprocessingWidget(QWidget):
     """Widget to start and monitor the preprocessing."""
 
@@ -311,6 +320,9 @@ class PreprocessingWidget(QWidget):
             self.progress_bar.setValue(int(fraction_done * 100))
 
 
+########################################################################################################################
+# offline phase window
+########################################################################################################################
 class OfflinePhaseWindow(QWidget):
     """Window of the offline phase."""
 
