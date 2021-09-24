@@ -124,8 +124,7 @@ class TreeSearchExploration(BaseStrategy):
 
                 document, extraction, distance = choices(remaining, weights=softmax_weights)[0]
                 num_interactions += 1
-                # if self.query_user_fn(document, attribute, extraction, num_interactions):
-                is_add_attribute = yield False, (document, attribute, extraction, num_interactions)
+                is_add_attribute = yield document, attribute, extraction, num_interactions
                 if is_add_attribute:
                     matching_extractions.append((document, extraction))
                     new_remaining = []
@@ -187,8 +186,7 @@ class TreeSearchExploration(BaseStrategy):
                 for doc, ext, dist in samples:
                     if num_interactions < self.max_interactions:
                         num_interactions += 1
-                        # if self.query_user_fn(doc, attribute, ext, num_interactions):
-                        is_add_attribute = yield False, (doc, attribute, ext, num_interactions)
+                        is_add_attribute = yield doc, attribute, ext, num_interactions
                         if is_add_attribute:
                             matching_extractions.append((doc, ext))
                             new_matching.append((doc, ext, dist))
@@ -225,7 +223,7 @@ class TreeSearchExploration(BaseStrategy):
                     rows[document].extractions[attribute.label] = extraction
                     closest_distances[document] = distance
 
-        return True, rows
+        return rows
 
 
 class DFSExploration(BaseStrategy):
@@ -288,8 +286,7 @@ class DFSExploration(BaseStrategy):
                     document_index, extraction, distance = choices(remaining, weights=softmax_weights)[0]
 
                     num_interactions += 1
-                    is_add_attribute = yield False(document_index, attribute, extraction, num_interactions)
-                    # if self.query_user_fn(document_index, attribute, extraction, num_interactions):
+                    is_add_attribute = yield document_index, attribute, extraction, num_interactions
                     if is_add_attribute:
                         remaining = list(filter(lambda x: x[0] != document_index, remaining))
                         matching_extractions.append((document_index, extraction))
@@ -337,8 +334,7 @@ class DFSExploration(BaseStrategy):
                     for doc, ext, dist in samples:
                         if num_interactions < self.max_interactions:
                             num_interactions += 1
-                            # if self.query_user_fn(doc, attribute, ext, num_interactions):
-                            is_add_attribute = yield False, (doc, attribute, ext, num_interactions)
+                            is_add_attribute = yield doc, attribute, ext, num_interactions
                             if is_add_attribute:
                                 matching_extractions.append((doc, ext))
                                 new_matching.append((doc, ext))
@@ -371,7 +367,7 @@ class DFSExploration(BaseStrategy):
                     rows[document_index].extractions[attribute.label] = extraction
                     closest_distances[document_index] = distance
 
-        yield True, rows
+        return rows
 
 
 def query_user(document_index: int, attribute: Attribute, extraction: Extraction, num_interactions: int):

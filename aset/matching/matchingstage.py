@@ -121,19 +121,11 @@ class MatchingStage(Component):
         elif self.strategy is None:
             logger.error("No strategy has been defined!")
         else:
-            gen = self.strategy(self.documents, self.attributes)
-            add_next = None
-            while True:
-                is_finished, result = gen.send(add_next)
-                if is_finished:
-                    gen.close()
-                    break
-                add_next = yield is_finished, result
+            self.rows = yield from self.strategy(self.documents, self.attributes)
 
         tak = time()
 
         logger.info(f"Matched extractions in {tak - tik} seconds.")
-        yield True, result
 
     @property
     def table_str(self):
