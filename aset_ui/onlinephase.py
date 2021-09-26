@@ -540,11 +540,16 @@ class OnlinePhaseWorker(QObject):
                 self.mutex.unlock()
             return self.value
 
-        strategies.query_user = query_user
-
         # noinspection PyUnresolvedReferences
         self.matching_preparation_finished_to_ui.emit()
-        self.matching_stage.match_extractions_to_attributes()
+        generator = self.matching_stage.match_extractions_to_attributes()
+        document, attribute, extraction, num_interactions = next(generator)
+        while True:
+            try:
+                is_match = query_user(document, attribute, extraction, num_interactions)
+                document, attribute, extraction, num_interactions = generator.send(is_match)
+            except StopIteration:
+                break
 
         # noinspection PyUnresolvedReferences
         self.next_to_ui.emit()

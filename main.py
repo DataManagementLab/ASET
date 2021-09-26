@@ -24,7 +24,7 @@ from aset.extraction.processors import StanfordCoreNLPDateTimeProcessor, Stanfor
     StanfordCoreNLPStringProcessor
 from aset.matching.common import Attribute
 from aset.matching.matchingstage import MatchingStage
-from aset.matching.strategies import TreeSearchExploration
+from aset.matching.strategies import TreeSearchExploration, query_user
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger()
@@ -101,7 +101,14 @@ if __name__ == "__main__":
         )
         matching_stage.compute_attribute_embeddings()
         matching_stage.incorporate_example_mentions(example_mentions)
-        matching_stage.match_extractions_to_attributes()
+        generator = matching_stage.match_extractions_to_attributes()
+        document, attribute, extraction, num_interactions = next(generator)
+        while True:
+            try:
+                is_match = query_user(document, attribute, extraction, num_interactions)
+                document, attribute, extraction, num_interactions = generator.send(is_match)
+            except StopIteration:
+                break
 
         # display the results
         print("\n\n\n")

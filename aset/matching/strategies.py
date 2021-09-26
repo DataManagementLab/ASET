@@ -58,6 +58,7 @@ class StaticMatching(BaseStrategy):
                         closest_dist = dist
 
         return rows
+        yield # this will never be called, but it makes this function return a generator
 
 
 class TreeSearchExploration(BaseStrategy):
