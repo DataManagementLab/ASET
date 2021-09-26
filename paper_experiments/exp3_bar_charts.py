@@ -3,8 +3,8 @@
 import logging.config
 
 import numpy as np
-from matplotlib import pyplot as plt
 import pandas as pd
+from matplotlib import pyplot as plt
 
 logging.config.fileConfig("../logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger()
@@ -12,8 +12,9 @@ logger = logging.getLogger()
 if __name__ == "__main__":
 
     # read the results
-    path = "../results/aviation/Stanza/end2end/aset.csv"
-    values = pd.read_csv(path, header=0, names=["attribute", "recall", "precision", "f1_score", "recall_diff_value", "precision_diff_value", "f1_score_diff_value"])
+    path = "../results/aviation/Stanza/end2end/aset-dfs.csv"
+    values = pd.read_csv(path, header=0, names=["attribute", "recall", "precision", "f1_score", "recall_diff_value",
+                                                "precision_diff_value", "f1_score_diff_value"])
 
     attributes = values["attribute"].tolist()
 
@@ -32,31 +33,31 @@ if __name__ == "__main__":
     # ASET f1-scores by attribute
     ax.bar(
         x,
-        values["f1-score"],
+        values["f1_score"],
         color="#e58e26",  # "black"
         width=0.7
     )
 
-    for x_value, value in zip(x, values["f1-score"]):
+    for x_value, value in zip(x, values["f1_score"]):
         ax.text(
-                    x_value,
-                    value + 0.01,
-                    str(round(value, 2)),
-                    fontsize=20,
-                    horizontalalignment="center"
-                )
+            x_value,
+            value + 0.01,
+            str(round(value, 2)),
+            fontsize=20,
+            horizontalalignment="center"
+        )
 
     # COMA avg. recall  (aviation: 0.096, corona: 1/6)
     ax.bar(
         [0],
-        [1/6],
+        [0.096],
         color="#079992",  # "grey"
         width=0.7
     )
     ax.text(
         0,
-        1/6 + 0.01,
-        str(round(1/6, 2)),
+        0.096 + 0.01,
+        str(round(0.096, 2)),
         fontsize=20,
         horizontalalignment="center"
     )
