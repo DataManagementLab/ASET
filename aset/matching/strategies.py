@@ -128,7 +128,9 @@ class TreeSearchExploration(BaseStrategy):
                 num_interactions += 1
                 if not skip:
                     is_add_attribute, skip = yield document, attribute, extraction, num_interactions
-                if skip or is_add_attribute:
+                if skip:
+                    break
+                if is_add_attribute:
                     matching_extractions.append((document, extraction))
                     new_remaining = []
                     new_weights = []
@@ -191,7 +193,9 @@ class TreeSearchExploration(BaseStrategy):
                         num_interactions += 1
                         if not skip:
                             is_add_attribute, skip = yield doc, attribute, ext, num_interactions
-                        if skip or is_add_attribute:
+                        if skip:
+                            break
+                        if is_add_attribute:
                             matching_extractions.append((doc, ext))
                             new_matching.append((doc, ext, dist))
 
@@ -293,7 +297,9 @@ class DFSExploration(BaseStrategy):
                     num_interactions += 1
                     if not skip:
                         is_add_attribute, skip = yield document_index, attribute, extraction, num_interactions
-                    if skip or is_add_attribute:
+                    if skip:
+                        break
+                    if is_add_attribute:
                         remaining = list(filter(lambda x: x[0] != document_index, remaining))
                         matching_extractions.append((document_index, extraction))
                         queue.append((document_index, extraction))
@@ -342,7 +348,9 @@ class DFSExploration(BaseStrategy):
                             num_interactions += 1
                             if not skip:
                                 is_add_attribute, skip = yield doc, attribute, ext, num_interactions
-                            if skip or is_add_attribute:
+                            if skip:
+                                break
+                            if is_add_attribute:
                                 matching_extractions.append((doc, ext))
                                 new_matching.append((doc, ext))
 
