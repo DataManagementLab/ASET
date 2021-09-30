@@ -123,7 +123,7 @@ def do_evaluation_run(
     while True:
         try:
             is_match = automatic_query_user(document, attribute, extraction, num_interactions)
-            document, attribute, extraction, num_interactions = generator.send(is_match)
+            document, attribute, extraction, num_interactions = generator.send((is_match, False))
         except StopIteration:
             break
 

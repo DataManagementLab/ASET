@@ -106,7 +106,7 @@ if __name__ == "__main__":
         while True:
             try:
                 is_match = query_user(document, attribute, extraction, num_interactions)
-                document, attribute, extraction, num_interactions = generator.send(is_match)
+                document, attribute, extraction, num_interactions = generator.send((is_match, False))
             except StopIteration:
                 break
 
