@@ -1,11 +1,12 @@
 /venv/
 /.idea/
 __pycache__/
+*.egg-info
 
 # "libraries"
 /wiki-news-300d-1M-subword.vec
 /stanford-corenlp-full-2020-04-20
-/glove.6B.300d.txt
+/glove.*.txt
 
 # input and output
 /input/*

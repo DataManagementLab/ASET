@@ -3,6 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from operator import itemgetter
 from random import choices
+from typing import Callable
 
 from scipy.special import softmax
 
@@ -57,6 +58,7 @@ class StaticMatching(BaseStrategy):
                         closest_dist = dist
 
         return rows
+        yield # this will never be called, but it makes this function return a generator
 
 
 class TreeSearchExploration(BaseStrategy):
@@ -115,6 +117,7 @@ class TreeSearchExploration(BaseStrategy):
                     weights.append(1 - distance)
 
             # sample extractions with rising temperature and present them to the user
+            skip = False
             while len(matching_extractions) < self.max_roots \
                     and (matching_extractions == [] or num_interactions < self.max_initial_tries) \
                     and num_interactions < self.max_interactions:
@@ -123,7 +126,11 @@ class TreeSearchExploration(BaseStrategy):
 
                 document, extraction, distance = choices(remaining, weights=softmax_weights)[0]
                 num_interactions += 1
-                if query_user(document, attribute, extraction, num_interactions):
+                if not skip:
+                    is_add_attribute, skip = yield document, attribute, extraction, num_interactions
+                if skip:
+                    break
+                if is_add_attribute:
                     matching_extractions.append((document, extraction))
                     new_remaining = []
                     new_weights = []
@@ -184,7 +191,11 @@ class TreeSearchExploration(BaseStrategy):
                 for doc, ext, dist in samples:
                     if num_interactions < self.max_interactions:
                         num_interactions += 1
-                        if query_user(doc, attribute, ext, num_interactions):
+                        if not skip:
+                            is_add_attribute, skip = yield doc, attribute, ext, num_interactions
+                        if skip:
+                            break
+                        if is_add_attribute:
                             matching_extractions.append((doc, ext))
                             new_matching.append((doc, ext, dist))
 
@@ -271,6 +282,7 @@ class DFSExploration(BaseStrategy):
                     distance = attribute.embedding.distance(extraction.embedding)
                     remaining.append((document_index, extraction, distance))
 
+            skip = False
             while num_interactions < self.max_interactions:
 
                 # find a root
@@ -283,7 +295,11 @@ class DFSExploration(BaseStrategy):
                     document_index, extraction, distance = choices(remaining, weights=softmax_weights)[0]
 
                     num_interactions += 1
-                    if query_user(document_index, attribute, extraction, num_interactions):
+                    if not skip:
+                        is_add_attribute, skip = yield document_index, attribute, extraction, num_interactions
+                    if skip:
+                        break
+                    if is_add_attribute:
                         remaining = list(filter(lambda x: x[0] != document_index, remaining))
                         matching_extractions.append((document_index, extraction))
                         queue.append((document_index, extraction))
@@ -330,7 +346,11 @@ class DFSExploration(BaseStrategy):
                     for doc, ext, dist in samples:
                         if num_interactions < self.max_interactions:
                             num_interactions += 1
-                            if query_user(doc, attribute, ext, num_interactions):
+                            if not skip:
+                                is_add_attribute, skip = yield doc, attribute, ext, num_interactions
+                            if skip:
+                                break
+                            if is_add_attribute:
                                 matching_extractions.append((doc, ext))
                                 new_matching.append((doc, ext))
 

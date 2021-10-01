@@ -115,12 +115,13 @@ class MatchingStage(Component):
         tik = time()
 
         # match the extractions to the rows
+        result = None
         if len(self.attributes) == 0:
             logger.error("There are no attributes the extractions could be matched to!")
         elif self.strategy is None:
             logger.error("No strategy has been defined!")
         else:
-            self.rows = self.strategy(self.documents, self.attributes)
+            self.rows = yield from self.strategy(self.documents, self.attributes)
 
         tak = time()
 

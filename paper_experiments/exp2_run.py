@@ -109,8 +109,14 @@ def do_evaluation_run(
 
         return match
 
-    strategies.query_user = automatic_query_user
-    aset_matching_stage.match_extractions_to_attributes()
+    generator = aset_matching_stage.match_extractions_to_attributes()
+    document, attribute, extraction, num_interactions = next(generator)
+    while True:
+        try:
+            is_match = automatic_query_user(document, attribute, extraction, num_interactions)
+            document, attribute, extraction, num_interactions = generator.send((is_match, False))
+        except StopIteration:
+            break
 
     # evaluate the matching process
     recalls = {}
