@@ -1,137 +1,132 @@
-"""
-The main entry point into Ad-hoc Structured Exploration of Text Collections (ASET).
+import json
+import logging
+import sys
 
-Run this script to execute ASET in the command line. The documents from the document collection must be stored in the
-'input' folder as '*.txt' files. ASET will then ask you to specify the names of the attributes. The output will be
-stored in the 'output' folder as a '.csv' file.
+import datasets.aviation.aviation as dataset
+from aset.data.annotations import SentenceStartCharsAnnotation
+from aset.data.data import ASETDocumentBase, ASETDocument, ASETAttribute, ASETNugget
+from aset.matching.distance import SignalsMeanDistance
+from aset.matching.phase import TreeSearchMatchingPhase
+from aset.preprocessing.embedding import BERTContextSentenceEmbedder, FastTextLabelEmbedder, SBERTTextEmbedder, \
+    RelativePositionEmbedder, SBERTExamplesEmbedder
+from aset.preprocessing.extraction import StanzaNERExtractor
+from aset.preprocessing.phase import PreprocessingPhase
+from aset.resources import ResourceManager
 
-ASET extracts information nuggets (extractions) from a collection of documents and matches them to a list of
-user-specified attributes. Each document corresponds with a single row in the resulting table.
-"""
-
-import csv
-import logging.config
-import os
-import traceback
-from glob import glob
-
-from aset.core.resources import close_all_resources
-from aset.embedding.aggregation import ExtractionEmbeddingMethod, AttributeEmbeddingMethod
-from aset.extraction.common import Document
-from aset.extraction.extractionstage import ExtractionStage
-from aset.extraction.extractors import StanzaExtractor
-from aset.extraction.processors import StanfordCoreNLPDateTimeProcessor, StanfordCoreNLPNumberProcessor, \
-    StanfordCoreNLPStringProcessor
-from aset.matching.common import Attribute
-from aset.matching.matchingstage import MatchingStage
-from aset.matching.strategies import TreeSearchExploration, query_user
-
-logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
 
-# run ASET
 if __name__ == "__main__":
-    try:
-        # prompt the user to specify the attributes and give examples
-        print("Enter the names of the attributes. Leave empty and press enter to continue.")
-        attributes = []
-        while True:
-            attribute_name = input("Attribute name: ")
-            if attribute_name == "":
-                break
-            else:
-                if attribute_name not in [attribute.label for attribute in attributes]:
-                    attributes.append(Attribute(attribute_name))
-                else:
-                    print("An attribute with this name already exists. Please choose a different name!")
+    with ResourceManager() as resource_manager:
+        statistics = {}
 
-        print("\nEnter example mentions for each attribute. Leave empty and press enter to continue.")
-        example_mentions = []
-        for attribute in attributes:
-            mentions = []
-            while True:
-                mention = input("Example mention for '{}': ".format(attribute.label))
-                if mention == "":
-                    break
-                else:
-                    mentions.append(mention)
-            example_mentions.append(mentions)
-            print()
+        documents = dataset.load_dataset()
 
-        # load the document collection
-        logger.info("Load the documents.")
-        path = os.path.join(os.path.dirname(__file__), "input", "*.txt")
-        file_paths = glob(path)
-        documents = []
-        for file_path in file_paths:
-            with open(file_path, encoding="utf-8") as file:
-                documents.append(Document(file.read()))
-        logger.info("Loaded {} documents.".format(len(documents)))
+        # create the document base
+        document_base = ASETDocumentBase(
+            documents=[ASETDocument(document["id"], document["text"]) for document in documents],
+            attributes=[
+                ASETAttribute("date"),
+                ASETAttribute("airport code")
+            ]
+        )
 
-        # engage the extraction stage
-        extraction_stage = ExtractionStage(
-            documents=documents,
+        # preprocessing
+        preprocessing_phase = PreprocessingPhase(
             extractors=[
-                StanzaExtractor()
+                StanzaNERExtractor()
             ],
-            processors=[
-                StanfordCoreNLPDateTimeProcessor(),
-                StanfordCoreNLPNumberProcessor(),
-                StanfordCoreNLPStringProcessor()
-            ],
-            embedding_method=ExtractionEmbeddingMethod()
+            normalizers=[],
+            embedders=[
+                FastTextLabelEmbedder("FastTextEmbedding100000", True, [" ", "_"]),
+                SBERTTextEmbedder("SBERTBertLargeNliMeanTokensResource"),
+                BERTContextSentenceEmbedder("BertLargeCasedResource"),
+                RelativePositionEmbedder()
+            ]
         )
-        extraction_stage.derive_extractions()
-        extraction_stage.determine_values()
-        extraction_stage.compute_extraction_embeddings()
+        preprocessing_phase(document_base, statistics=statistics)
 
-        # engage the matching stage
-        matching_stage = MatchingStage(
-            documents=extraction_stage.documents,
-            attributes=attributes,
-            strategy=TreeSearchExploration(
-                max_roots=2,
-                max_initial_tries=10,
-                max_children=2,
-                explore_far_factor=1.15,
-                max_distance=0.3,
-                max_interactions=25
+        # matching
+        matching_phase = TreeSearchMatchingPhase(
+            distance=SignalsMeanDistance(
+                signal_strings=[
+                    "LabelEmbeddingSignal",
+                    "TextEmbeddingSignal",
+                    "ContextSentenceEmbeddingSignal",
+                    "RelativePositionSignal",
+                    "POSTagsSignal"
+                ]
             ),
-            embedding_method=AttributeEmbeddingMethod()
+            examples_embedder=SBERTExamplesEmbedder("SBERTBertLargeNliMeanTokensResource"),
+            max_num_feedback=25,
+            max_children=2,
+            max_distance=0.6,
+            exploration_factor=1.2
         )
-        matching_stage.compute_attribute_embeddings()
-        matching_stage.incorporate_example_mentions(example_mentions)
-        generator = matching_stage.match_extractions_to_attributes()
-        document, attribute, extraction, num_interactions = next(generator)
-        while True:
-            try:
-                is_match = query_user(document, attribute, extraction, num_interactions)
-                document, attribute, extraction, num_interactions = generator.send((is_match, False))
-            except StopIteration:
-                break
 
-        # display the results
-        print("\n\n\n")
-        print(matching_stage.table_str)
 
-        # store the results
-        path = os.path.join(os.path.dirname(__file__), "output", "results.csv")
-        with open(path, "w", newline="", encoding="utf-8") as file:
-            fieldnames = [attribute.label for attribute in matching_stage.attributes]
-            writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=",", quotechar="\"", quoting=csv.QUOTE_ALL)
-            for row in matching_stage.rows:
-                row_dict = {}
-                for attribute_name, extraction in row.extractions.items():
-                    if extraction is None:  # no match has been found
-                        row_dict[attribute_name] = "[no-match]"
-                    elif extraction.value is None:  # no value
-                        row_dict[attribute_name] = "[no-value]"
+        def feedback_fn(nugget: ASETNugget, attribute: ASETAttribute):
+            # determine the context sentence
+            sent_start_chars = nugget.document.annotations[SentenceStartCharsAnnotation.annotation_str].value
+            context_start_char = 0
+            context_end_char = 0
+            for ix, sent_start_char in enumerate(sent_start_chars):
+                if sent_start_char > nugget.start_char:
+                    if ix == 0:
+                        context_start_char = 0
+                        context_end_char = sent_start_char
+                        break
                     else:
-                        row_dict[attribute_name] = extraction.value
-                writer.writerow(row_dict)
+                        context_start_char = sent_start_chars[ix - 1]
+                        context_end_char = sent_start_char
+                        break
+            else:
+                if sent_start_chars != []:
+                    context_start_char = sent_start_chars[-1]
+                    context_end_char = len(nugget.document.text)
+            context_sentence = nugget.document.text[context_start_char:context_end_char]
 
-        # close all resources
-        close_all_resources()
-    except:
-        traceback.print_exc()
-        close_all_resources()
+            # get user feedback
+            sys.stdout.flush()
+            sys.stderr.flush()
+            print("{}? '{}' from '{}'".format(
+                attribute.name,
+                nugget.text.ljust(40),
+                context_sentence
+            ))
+
+            while True:
+                s: str = input("y/n? ")
+                if s == "y":
+                    return True
+                elif s == "n":
+                    return False
+
+
+        def examples_fn(attribute: ASETAttribute):
+            sys.stdout.flush()
+            sys.stderr.flush()
+            print("Provide examples for '{}', leave empty to continue:".format(attribute.name))
+
+            examples = []
+            while True:
+                s = input("- ")
+                if s == "":
+                    return examples
+                else:
+                    examples.append(s)
+
+
+        matching_phase(
+            document_base,
+            feedback_fn,
+            examples_fn,
+            statistics=statistics
+        )
+
+        # store the result
+        with open("cache/matched-document-base.bson", "wb") as file:
+            file.write(document_base.to_bson())
+
+    with open("cache/statistics.json", "w") as file:
+        json.dump(statistics, file, indent=4)

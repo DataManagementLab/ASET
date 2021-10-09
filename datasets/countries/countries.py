@@ -1,16 +1,16 @@
 """
-Aviation Dataset
-================
+Countries Dataset
+=================
 
-The aviation dataset consists of the executive summaries of the NTSB Aviation Accident Reports:
-https://www.ntsb.gov/investigations/AccidentReports/Pages/aviation.aspx
+The countries dataset consists of articles about sovereign states from the T-Rex dataset:
+https://hadyelsahar.github.io/t-rex/
 
 The texts have been annotated with information about where they mention the structured values.
 
 Each entry of the dataset is a json file of the following structure:
 {
     "id": "<id of the document>",
-    "text": "<summary of the report>",
+    "text": "<article>",
     "mentions": {
         "<attribute name>": [
             {
@@ -32,29 +32,20 @@ from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
-NAME = "aviation"
+NAME = "countries"
 
 ATTRIBUTES = [
-    "event_date",  # date of the event
-    "location_city",  # city or place closest to the site of the event
-    "location_state",  # state the city is located in
-    "airport_code",  # code of the airport
-    "airport_name",  # airport name
-    "aircraft_damage",  # severity of the damage to the aircraft
-    "aircraft_registration_number",  # registration number of the involved aircraft
-    "aircraft_make",  # name of the aircraft's manufacturer
-    "aircraft_model",  # alphanumeric aircraft model code
-    "far_description",  # applicable regulation part or authority
-    "air_carrier",  # name of the operator of the aircraft
-    "weather_condition"  # weather conditions at the time of the event
+    "official_language",  # official language
+    "capital",  # capital
+    "continent"  # continent
 ]
 
 
 def load_dataset():
     """
-    Load the aviation dataset.
+    Load the countries dataset.
 
-    This method requires the .json files in the "datasets/aviation/documents/" folder.
+    This method requires the .json files in the "datasets/countries/documents/" folder.
     """
     dataset: List[Dict] = []
     path = os.path.join(os.path.dirname(__file__), "documents", "*.json")

@@ -1,27 +1,16 @@
 /venv/
 /.idea/
 __pycache__/
-*.egg-info
 
-# "libraries"
-/wiki-news-300d-1M-subword.vec
-/stanford-corenlp-full-2020-04-20
-/glove.*.txt
+/cache/
+!/cache/info.info
+/models/
 
-# input and output
-/input/*
-!/input/info.info
+/experiments/results/
+!/experiments/results/info.info
 
-/output/*
-!/output/info.info
-
-# evaluation results
-/results/*
-!/results/info.info
-
-# datasets
-/datasets/aviation/*
+/datasets/
 !/datasets/aviation/aviation.py
-
-/datasets/corona/*
 !/datasets/corona/corona.py
+!/datasets/countries/countries.py
+!/datasets/nobel/nobel.py

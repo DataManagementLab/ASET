@@ -1,22 +1,28 @@
-"""
-The main entry point into Ad-hoc Structured Exploration of Text Collections User Interface (ASET UI).
+import logging
+import sys
 
-Run this script to execute ASET UI, which is a graphical user interface for ASET.
+from PyQt6.QtWidgets import QApplication, QStyleFactory
 
-ASET extracts information nuggets (extractions) from a collection of documents and matches them to a list of
-user-specified attributes. Each document corresponds with a single row in the resulting table.
-"""
+from aset.resources import ResourceManager
+from aset_ui.main_window import MainWindow
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger()
 
 if __name__ == "__main__":
-    # set up logging
-    import logging.config
+    logger.info("Starting aset_ui.")
 
-    logging.config.fileConfig("logging.conf")
-    logger = logging.getLogger()
-    logger.info("Starting application.")
+    with ResourceManager() as resource_manager:
+        # set up PyQt application
+        app = QApplication(sys.argv)
 
-    # start the application
-    import sys
-    from aset_ui import app
+        preferred_style = "Windows"
+        if preferred_style in QStyleFactory.keys():
+            app.setStyle(preferred_style)
+            logger.info(f"Using preferred style '{preferred_style}'.")
+        else:
+            logger.info(f"Using default style '{app.style().objectName()}'.")
 
-    sys.exit(app.run(sys.argv))
+        window = MainWindow()
+
+        sys.exit(app.exec())
