@@ -8,19 +8,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger()
 
 if __name__ == "__main__":
-    path = "results/aviation/aset-stanza-dfs.json"
+    path = "results/aviation/aset-stanza-ranking.json"
     with open(path) as file:
         record = json.load(file)
 
     num_mentions = [record["dataset"]["mentioned"][attribute] for attribute in record["dataset"]["attributes"]]
-    num_extracted = [record["preprocessing_phase"]["results"][attribute] for attribute in
+    num_extracted = [record["preprocessing"]["results"][attribute] for attribute in
                      record["dataset"]["attributes"]]
     percent_extracted = [y / x for x, y in zip(num_mentions, num_extracted)]
-    recalls = [record["matching_phase"]["results"][attribute]["recall"] for attribute in
+    recalls = [record["matching"]["results"][attribute]["recall"] for attribute in
                record["dataset"]["attributes"]]
-    precisions = [record["matching_phase"]["results"][attribute]["precision"] for attribute in
+    precisions = [record["matching"]["results"][attribute]["precision"] for attribute in
                   record["dataset"]["attributes"]]
-    f1_scores = [record["matching_phase"]["results"][attribute]["f1_score"] for attribute in
+    f1_scores = [record["matching"]["results"][attribute]["f1_score"] for attribute in
                  record["dataset"]["attributes"]]
 
     ####################################################################################################################

@@ -2,9 +2,9 @@ from typing import List
 
 import pytest
 
-from aset.data.annotations import SentenceStartCharsAnnotation
+from aset.data.annotations import SentenceStartCharsAnnotation, CurrentMatchIndexAnnotation
 from aset.data.data import ASETDocument, ASETNugget, ASETAttribute, ASETDocumentBase
-from aset.data.signals import LabelSignal
+from aset.data.signals import LabelSignal, CachedDistanceSignal
 
 
 @pytest.fixture
@@ -125,6 +125,21 @@ def test_aset_nugget(aset_documents, aset_nuggets, aset_attributes, aset_documen
     assert aset_nuggets[5] != aset_nuggets[6]
     assert aset_nuggets[6] != aset_nuggets[5]
 
+    assert aset_nuggets[5][LabelSignal] == "my-label-signal"
+    assert aset_nuggets[5][LabelSignal.signal_str] == "my-label-signal"
+
+    aset_nuggets[5][LabelSignal] = "new-value"
+    assert aset_nuggets[5][LabelSignal] == "new-value"
+
+    aset_nuggets[5][LabelSignal.signal_str] = "new-new-value"
+    assert aset_nuggets[5][LabelSignal] == "new-new-value"
+
+    aset_nuggets[5][LabelSignal] = LabelSignal("another-value")
+    assert aset_nuggets[5][LabelSignal] == "another-value"
+
+    aset_nuggets[5][CachedDistanceSignal] = CachedDistanceSignal(0.23)
+    assert aset_nuggets[5][CachedDistanceSignal] == 0.23
+
 
 def test_aset_attribute(aset_documents, aset_nuggets, aset_attributes, aset_document_base) -> None:
     # test __eq__
@@ -147,6 +162,21 @@ def test_aset_attribute(aset_documents, aset_nuggets, aset_attributes, aset_docu
     assert aset_attributes[1].signals[LabelSignal.signal_str].value == "my-label-signal"
     assert aset_attributes[1] != aset_attributes[2]
     assert aset_attributes[2] != aset_attributes[1]
+
+    assert aset_attributes[1][LabelSignal] == "my-label-signal"
+    assert aset_attributes[1][LabelSignal.signal_str] == "my-label-signal"
+
+    aset_attributes[1][LabelSignal] = "new-value"
+    assert aset_attributes[1][LabelSignal] == "new-value"
+
+    aset_attributes[1][LabelSignal.signal_str] = "new-new-value"
+    assert aset_attributes[1][LabelSignal] == "new-new-value"
+
+    aset_attributes[1][LabelSignal] = LabelSignal("another-value")
+    assert aset_attributes[1][LabelSignal] == "another-value"
+
+    aset_attributes[1][CachedDistanceSignal] = CachedDistanceSignal(0.23)
+    assert aset_attributes[1][CachedDistanceSignal] == 0.23
 
 
 def test_aset_document(aset_documents, aset_nuggets, aset_attributes, aset_document_base) -> None:
@@ -180,6 +210,21 @@ def test_aset_document(aset_documents, aset_nuggets, aset_attributes, aset_docum
     assert aset_documents[2].annotations[SentenceStartCharsAnnotation.annotation_str].value == [0, 10, 20]
     assert aset_documents[2] != aset_documents[3]
     assert aset_documents[3] != aset_documents[2]
+
+    assert aset_documents[2][SentenceStartCharsAnnotation] == [0, 10, 20]
+    assert aset_documents[2][SentenceStartCharsAnnotation.annotation_str] == [0, 10, 20]
+
+    aset_documents[2][SentenceStartCharsAnnotation] = [1, 2, 3]
+    assert aset_documents[2][SentenceStartCharsAnnotation] == [1, 2, 3]
+
+    aset_documents[2][SentenceStartCharsAnnotation.annotation_str] = [3, 4, 5]
+    assert aset_documents[2][SentenceStartCharsAnnotation] == [3, 4, 5]
+
+    aset_documents[2][SentenceStartCharsAnnotation] = SentenceStartCharsAnnotation([6, 7])
+    assert aset_documents[2][SentenceStartCharsAnnotation] == [6, 7]
+
+    aset_documents[2][CurrentMatchIndexAnnotation] = CurrentMatchIndexAnnotation(2)
+    assert aset_documents[2][CurrentMatchIndexAnnotation] == 2
 
 
 def test_document_base(aset_documents, aset_nuggets, aset_attributes, aset_document_base) -> None:

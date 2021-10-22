@@ -1,6 +1,7 @@
 import abc
 import logging
-from typing import Optional, Callable, Dict, Any, List, Type
+import time
+from typing import Dict, Any, List, Type
 
 from spacy.tokens import Doc
 
@@ -9,6 +10,9 @@ from aset.config import ConfigurableElement
 from aset.data.annotations import SentenceStartCharsAnnotation
 from aset.data.data import ASETDocumentBase, ASETNugget
 from aset.data.signals import LabelSignal, POSTagsSignal
+from aset.resources import StanzaNERPipeline
+from aset.statistics import Statistics
+from aset.status import StatusFunction
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -36,19 +40,22 @@ class BaseExtractor(ConfigurableElement, abc.ABC):
     def __eq__(self, other) -> bool:
         return isinstance(other, self.__class__) and self.extractor_str == other.extractor_str
 
+    def __hash__(self) -> int:
+        return hash(self.extractor_str)
+
     @abc.abstractmethod
     def __call__(
             self,
             document_base: ASETDocumentBase,
-            status_fn: Optional[Callable[[str, float], None]] = None,
-            statistics: Optional[Dict[str, Any]] = None
+            status_fn: StatusFunction,
+            statistics: Statistics
     ) -> None:
         """
         Obtain ASETNuggets from the documents of the given ASETDocumentBase.
 
         :param document_base: ASETDocumentBase to work on
         :param status_fn: callback function to communicate current status (message and progress)
-        :param statistics: record to collect statistics
+        :param statistics: statistics object to collect statistics
         """
         raise NotImplementedError
 
@@ -56,8 +63,12 @@ class BaseExtractor(ConfigurableElement, abc.ABC):
     def from_config(cls, config: Dict[str, Any]) -> "BaseExtractor":
         return EXTRACTORS[config["extractor_str"]].from_config(config)
 
-    def _use_status_fn(self, status_fn: Optional[Callable[[str, float], None]],
-                       document_base: ASETDocumentBase, ix: int) -> None:
+    def _use_status_fn(
+            self,
+            status_fn: StatusFunction,
+            document_base: ASETDocumentBase,
+            ix: int
+    ) -> None:
         """
         Helper method that calls the status function at regular intervals.
 
@@ -65,9 +76,9 @@ class BaseExtractor(ConfigurableElement, abc.ABC):
         :param document_base: ASETDocumentBase to work on
         :param ix: index of the current document
         """
-        if status_fn is not None:
-            if ix == 0:
-                status_fn(f"Running {self.extractor_str}...", 0)
+        if ix == 0:
+            status_fn(f"Running {self.extractor_str}...", 0)
+        else:
             num_documents: int = len(document_base.documents)
             interval: int = num_documents // 10
             if interval != 0 and ix % interval == 0:
@@ -100,14 +111,15 @@ class SpacyNERExtractor(BaseExtractor):
     def __call__(
             self,
             document_base: ASETDocumentBase,
-            status_fn: Optional[Callable[[str, float], None]] = None,
-            statistics: Optional[Dict[str, Any]] = None
+            status_fn: StatusFunction,
+            statistics: Statistics
     ) -> None:
+        logger.info(f"Execute {self.extractor_str}.")
+        tick: float = time.time()
+        status_fn(f"Running {self.extractor_str}...", -1)
 
-        if statistics is not None:
-            statistics["num_documents"] = len(document_base.documents)
-            statistics["num_nuggets"] = 0
-            statistics["spacy_entity_type_dist"] = {}
+        statistics["extractor_str"] = self.extractor_str
+        statistics["num_documents"] = len(document_base.documents)
 
         for ix, document in enumerate(document_base.documents):
             self._use_status_fn(status_fn, document_base, ix)
@@ -120,9 +132,7 @@ class SpacyNERExtractor(BaseExtractor):
             for sentence in spacy_output.sents:
                 sentence_start_chars.append(sentence.start_char)
 
-            # noinspection PyTypeChecker
-            annotation: SentenceStartCharsAnnotation = SentenceStartCharsAnnotation(sentence_start_chars)
-            document.annotations[SentenceStartCharsAnnotation.annotation_str] = annotation
+            document[SentenceStartCharsAnnotation] = SentenceStartCharsAnnotation(sentence_start_chars)
 
             for entity in spacy_output.ents:
                 type_str = entity.label_  # TODO: create type mappings
@@ -135,15 +145,17 @@ class SpacyNERExtractor(BaseExtractor):
                     value=None
                 )
 
-                nugget.signals[POSTagsSignal.signal_str] = POSTagsSignal([])  # TODO: gather pos tags
+                nugget[POSTagsSignal] = POSTagsSignal([])  # TODO: gather pos tags
+                nugget[LabelSignal] = LabelSignal(entity.label_)  # TODO: create label mappings
 
-                nugget.signals[LabelSignal.signal_str] = LabelSignal(entity.label_)  # TODO: create label mappings
                 document.nuggets.append(nugget)
 
-                if statistics is not None:
-                    statistics["num_nuggets"] += 1
-                    statistics["spacy_entity_type_dist"][entity.label_] = \
-                        statistics["spacy_entity_type_dist"].get(entity.label_, 0) + 1
+                statistics["num_nuggets"] += 1
+                statistics["spacy_entity_type_dist"][entity.label_] += 1
+
+        status_fn(f"Running {self.extractor_str}...", 1)
+        tack: float = time.time()
+        logger.info(f"Executed {self.extractor_str} in {tack - tick} seconds.")
 
     def to_config(self) -> Dict[str, Any]:
         return {
@@ -171,25 +183,26 @@ class StanzaNERExtractor(BaseExtractor):
         super(StanzaNERExtractor, self).__init__()
 
         # preload required resources
-        resources.MANAGER.load("StanzaNERPipeline")
+        resources.MANAGER.load(StanzaNERPipeline)
         logger.debug(f"Initialized {self.extractor_str}.")
 
     def __call__(
             self,
             document_base: ASETDocumentBase,
-            status_fn: Optional[Callable[[str, float], None]] = None,
-            statistics: Optional[Dict[str, Any]] = None
+            status_fn: StatusFunction,
+            statistics: Statistics
     ) -> None:
+        logger.info(f"Execute {self.extractor_str}.")
+        tick: float = time.time()
+        status_fn(f"Running {self.extractor_str}...", -1)
 
-        if statistics is not None:
-            statistics["num_documents"] = len(document_base.documents)
-            statistics["num_nuggets"] = 0
-            statistics["stanza_entity_type_dist"] = {}
+        statistics["extractor_str"] = self.extractor_str
+        statistics["num_documents"] = len(document_base.documents)
 
         for ix, document in enumerate(document_base.documents):
             self._use_status_fn(status_fn, document_base, ix)
 
-            stanza_output = resources.MANAGER["StanzaNERPipeline"](document.text)
+            stanza_output = resources.MANAGER[StanzaNERPipeline](document.text)
 
             sentence_start_chars: List[int] = []
 
@@ -228,8 +241,7 @@ class StanzaNERExtractor(BaseExtractor):
                         value=None
                     )
 
-                    pos_tags: List[str] = [word.xpos for word in entity.words]
-                    nugget.signals[POSTagsSignal.signal_str] = POSTagsSignal(pos_tags)
+                    nugget[POSTagsSignal] = POSTagsSignal([word.xpos for word in entity.words])
 
                     label: str = {
                         "QUANTITY": "quantity measurement weight distance",
@@ -252,17 +264,18 @@ class StanzaNERExtractor(BaseExtractor):
                         "PERSON": "person",
                     }[entity.type]
 
-                    nugget.signals[LabelSignal.signal_str] = LabelSignal(label)
+                    nugget[LabelSignal] = LabelSignal(label)
+
                     document.nuggets.append(nugget)
 
-                    if statistics is not None:
-                        statistics["num_nuggets"] += 1
-                        statistics["stanza_entity_type_dist"][entity.type] = \
-                            statistics["stanza_entity_type_dist"].get(entity.type, 0) + 1
+                    statistics["num_nuggets"] += 1
+                    statistics["stanza_entity_type_dist"][entity.type] += 1
 
-            # noinspection PyTypeChecker
-            annotation: SentenceStartCharsAnnotation = SentenceStartCharsAnnotation(sentence_start_chars)
-            document.annotations[SentenceStartCharsAnnotation.annotation_str] = annotation
+            document[SentenceStartCharsAnnotation] = SentenceStartCharsAnnotation(sentence_start_chars)
+
+        status_fn(f"Running {self.extractor_str}...", 1)
+        tack: float = time.time()
+        logger.info(f"Executed {self.extractor_str} in {tack - tick} seconds.")
 
     def to_config(self) -> Dict[str, Any]:
         return {

@@ -43,6 +43,9 @@ class BaseAnnotation(abc.ABC):
     def __eq__(self, other) -> bool:
         return isinstance(other, self.__class__) and self._value == other._value
 
+    def __hash__(self) -> int:
+        return hash(self.annotation_str)
+
     @property
     def value(self) -> Any:
         """Value of the annotation."""

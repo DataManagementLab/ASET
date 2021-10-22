@@ -1,3 +1,4 @@
+import csv
 import json
 import logging
 from json import JSONDecodeError
@@ -12,6 +13,8 @@ from aset.preprocessing.embedding import FastTextLabelEmbedder, SBERTTextEmbedde
     RelativePositionEmbedder
 from aset.preprocessing.extraction import StanzaNERExtractor
 from aset.preprocessing.phase import PreprocessingPhase
+from aset.statistics import Statistics
+from aset.status import StatusFunction
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ class ASETAPI(QObject):
     document_base_to_ui = pyqtSignal(ASETDocumentBase)  # document base
     preprocessing_phase_to_ui = pyqtSignal(PreprocessingPhase)  # preprocessing phase
     matching_phase_to_ui = pyqtSignal(BaseMatchingPhase)  # matching phase
-    statistics_to_ui = pyqtSignal(dict)  # statistics
+    statistics_to_ui = pyqtSignal(Statistics)  # statistics
     feedback_request_to_ui = pyqtSignal(dict)
 
     #######################################
@@ -67,6 +70,27 @@ class ASETAPI(QObject):
             with open(path, "wb") as file:
                 file.write(document_base.to_bson())
                 self.finished.emit("Finished!")
+        except FileNotFoundError:
+            logger.error("Directory does not exist!")
+            self.error.emit("Directory does not exist!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(str, ASETDocumentBase)
+    def save_table_to_csv(self, path, document_base):
+        logger.debug("Called slot 'save_table_to_csv'.")
+        self.status.emit("Saving table to CSV...", -1)
+        try:
+            table_dict = document_base.to_table_dict("text")  # TODO: currently stores the nuggets' texts
+            headers = list(table_dict.keys())
+            with open(path, 'w', encoding="utf-8") as file:
+                writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+                writer.writerow(headers)
+                for ix in range(len(table_dict[headers[0]])):
+                    row = [table_dict[header][ix] for header in headers]
+                    writer.writerow(row)
+            self.finished.emit("Finished!")
         except FileNotFoundError:
             logger.error("Directory does not exist!")
             self.error.emit("Directory does not exist!")
@@ -142,8 +166,7 @@ class ASETAPI(QObject):
                         "LabelEmbeddingSignal",
                         "TextEmbeddingSignal",
                         "ContextSentenceEmbeddingSignal",
-                        "RelativePositionSignal",
-                        "POSTagsSignal"
+                        "RelativePositionSignal"
                     ]
                 ),
                 max_num_feedback=25,
@@ -190,32 +213,33 @@ class ASETAPI(QObject):
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(ASETDocumentBase, PreprocessingPhase, dict)
+    @pyqtSlot(ASETDocumentBase, PreprocessingPhase, Statistics)
     def run_preprocessing_phase(self, document_base, preprocessing_phase, statistics):
         logger.debug("Called slot 'run_preprocessing_phase'.")
         self.status.emit("Running preprocessing phase...", -1)
         try:
-
-            def status_fn(message, progress):
+            def status_callback_fn(message, progress):
                 self.status.emit(message, progress)
 
-            preprocessing_phase(document_base, status_fn=status_fn, statistics=statistics)
+            status_fn = StatusFunction(status_callback_fn)
+
+            preprocessing_phase(document_base, status_fn, statistics)
             self.document_base_to_ui.emit(document_base)
-            if statistics is not None:
-                self.statistics_to_ui.emit(statistics)
+            self.statistics_to_ui.emit(statistics)
             self.finished.emit("Finished!")
         except Exception as e:
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(ASETDocumentBase, BaseMatchingPhase, dict)
+    @pyqtSlot(ASETDocumentBase, BaseMatchingPhase, Statistics)
     def run_matching_phase(self, document_base, matching_phase, statistics):
         logger.debug("Called slot 'run_matching_phase'.")
         self.status.emit("Running matching phase...", -1)
         try:
-
-            def status_fn(message, progress):
+            def status_callback_fn(message, progress):
                 self.status.emit(message, progress)
+
+            status_fn = StatusFunction(status_callback_fn)
 
             def feedback_fn(feedback_request):
                 self.feedback_request_to_ui.emit(feedback_request)
@@ -228,27 +252,21 @@ class ASETAPI(QObject):
 
                 return self.feedback
 
-            matching_phase(
-                document_base,
-                feedback_fn=feedback_fn,
-                status_fn=status_fn,
-                statistics=statistics
-            )
+            matching_phase(document_base, feedback_fn, status_fn, statistics)
             self.document_base_to_ui.emit(document_base)
-            if statistics is not None:
-                self.statistics_to_ui.emit(statistics)
+            self.statistics_to_ui.emit(statistics)
             self.finished.emit("Finished!")
         except Exception as e:
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(str, dict)
+    @pyqtSlot(str, Statistics)
     def save_statistics_to_json(self, path, statistics):
         logger.debug("Called slot 'save_statistics_to_json'.")
         self.status.emit("Saving statistics to JSON...", -1)
         try:
             with open(path, "w", encoding="utf-8") as file:
-                json.dump(statistics, file, indent=2)
+                json.dump(statistics.to_serializable(), file, indent=2)
                 self.finished.emit("Finished!")
         except FileNotFoundError:
             logger.error("Directory does not exist!")

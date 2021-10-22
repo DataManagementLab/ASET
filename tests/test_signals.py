@@ -21,9 +21,10 @@ def _test_signal(signal_class: Type["BaseSignal"], value_1: Any, value_2: Any, r
     assert signal_a != object()
     assert object() != signal_a
 
-    # test __str__ and __repr__
+    # test __str__, __hash__, and __repr__
     assert str(signal_a) == str(value_1)
     assert repr(signal_a) == f"{signal_class.__name__}({repr(value_1)})"
+    assert hash(signal_a) == hash(signal_a.signal_str)
 
     # test value
     assert signal_a.value == value_1

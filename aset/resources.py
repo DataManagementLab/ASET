@@ -2,7 +2,7 @@ import abc
 import logging
 import os
 import time
-from typing import Optional, Dict, Any, Type, List
+from typing import Optional, Dict, Any, Type, List, Union
 
 import numpy as np
 import spacy
@@ -442,12 +442,17 @@ class ResourceManager:
             resources_str if resources_str != "" else " -"
         )
 
-    def load(self, resource_str: str) -> None:
+    def load(self, resource: Union[str, Type[BaseResource]]) -> None:
         """
         Load a resource.
 
-        :param resource_str: identifier of the resource to load
+        :param resource: resource class or identifier of the resource to load
         """
+        if type(resource) == str:
+            resource_str: str = resource
+        else:
+            resource_str: str = resource.resource_str
+
         if resource_str not in RESOURCES.keys():
             logger.error(f"Unknown resource '{resource_str}'!")
             assert False, f"Unknown resource '{resource_str}'!"
@@ -460,12 +465,17 @@ class ResourceManager:
             tack: float = time.time()
             logger.info(f"Loaded resource '{resource_str}' in {tack - tick} seconds.")
 
-    def unload(self, resource_str: str) -> None:
+    def unload(self, resource: Union[str, Type[BaseResource]]) -> None:
         """
         Unload a resource.
 
-        :param resource_str: identifier of the resource to unload
+        :param resource: resource class or identifier of the resource to load
         """
+        if type(resource) == str:
+            resource_str: str = resource
+        else:
+            resource_str: str = resource.resource_str
+
         if resource_str not in RESOURCES.keys():
             logger.error(f"Unknown resource '{resource_str}'!")
             assert False, f"Unknown resource '{resource_str}'!"
@@ -480,13 +490,18 @@ class ResourceManager:
             tack: float = time.time()
             logger.info(f"Unloaded resource '{resource_str}' in {tack - tick} seconds.")
 
-    def __getitem__(self, resource_str: str) -> Any:
+    def __getitem__(self, resource: Union[str, Type[BaseResource]]) -> Any:
         """
         Access a resource.
 
-        :param resource_str: identifier of the resource to access
+        :param resource: resource class or identifier of the resource to load
         :return: the resource
         """
+        if type(resource) == str:
+            resource_str: str = resource
+        else:
+            resource_str: str = resource.resource_str
+
         if resource_str not in RESOURCES.keys():
             logger.error(f"Unknown resource '{resource_str}'!")
             assert False, f"Unknown resource '{resource_str}'!"

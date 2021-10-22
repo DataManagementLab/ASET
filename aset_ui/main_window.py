@@ -2,16 +2,16 @@ import logging
 
 from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QMutex, QWaitCondition
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QLabel, QProgressBar, QApplication, QFileDialog, \
-    QScrollArea
+from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QLabel, QProgressBar, QApplication, QFileDialog
 
 from aset.data.data import ASETDocumentBase
 from aset.matching.phase import BaseMatchingPhase
 from aset.preprocessing.phase import PreprocessingPhase
+from aset.statistics import Statistics
 from aset_ui.aset_api import ASETAPI
+from aset_ui.document_base_viewer import DocumentBaseViewerWidget
 from aset_ui.interactive_matching import InteractiveMatchingWidget
 from aset_ui.style import MENU_FONT, STATUS_BAR_FONT
-from aset_ui.viewers import DocumentBaseViewer, PreprocessingPhaseViewer, MatchingPhaseViewer
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +22,16 @@ class MainWindow(QMainWindow):
     ################################
     load_document_base_from_bson = pyqtSignal(str)
     save_document_base_to_bson = pyqtSignal(str, ASETDocumentBase)
+    save_table_to_csv = pyqtSignal(str, ASETDocumentBase)
     load_default_preprocessing_phase = pyqtSignal()
     load_preprocessing_phase_from_config = pyqtSignal(str)
     save_preprocessing_phase_to_config = pyqtSignal(str, PreprocessingPhase)
     load_default_matching_phase = pyqtSignal()
     load_matching_phase_from_config = pyqtSignal(str)
     save_matching_phase_to_config = pyqtSignal(str, BaseMatchingPhase)
-    run_preprocessing_phase = pyqtSignal(ASETDocumentBase, PreprocessingPhase, dict)
-    run_matching_phase = pyqtSignal(ASETDocumentBase, BaseMatchingPhase, dict)
-    save_statistics_to_json = pyqtSignal(str, dict)
+    run_preprocessing_phase = pyqtSignal(ASETDocumentBase, PreprocessingPhase, Statistics)
+    run_matching_phase = pyqtSignal(ASETDocumentBase, BaseMatchingPhase, Statistics)
+    save_statistics_to_json = pyqtSignal(str, Statistics)
 
     ##############################
     # slots (aset api --> aset ui)
@@ -40,68 +41,42 @@ class MainWindow(QMainWindow):
         logger.debug("Called slot 'status'.")
         self.status_widget_message.setText(message)
         if progress == -1:
-            self.status_widget_progress.setStyleSheet("QProgressBar::chunk  { background-color: black; }")
             self.status_widget_progress.setRange(0, 0)
         else:
-            self.status_widget_progress.setStyleSheet("QProgressBar::chunk { background-color: black; }")
             self.status_widget_progress.setRange(0, 100)
             self.status_widget_progress.setValue(int(progress * 100))
-        self.status_widget_layout.update()
 
     @pyqtSlot(str)
     def finished(self, message):
         logger.debug("Called slot 'finished'.")
         self.status_widget_message.setText(message)
-        self.status_widget_progress.setStyleSheet("QProgressBar::chunk { background-color: black; }")
         self.status_widget_progress.setRange(0, 100)
         self.status_widget_progress.setValue(100)
-        self.status_widget_layout.update()
 
-        if self.interactive_matching_widget is not None:
-            self.interactive_matching_widget.hide()
-            self.main_widget.show()
-            self.central_widget_layout.removeWidget(self.interactive_matching_widget)
-            self.central_widget_layout.addWidget(self.main_widget)
-            self.interactive_matching_widget.deleteLater()
-            self.interactive_matching_widget = None
-
+        self.show_document_base_viewer_widget()
         self._enable_global_input()
 
     @pyqtSlot(str)
     def error(self, message):
         logger.debug("Called slot 'error'.")
         self.status_widget_message.setText(message)
-        self.status_widget_progress.setStyleSheet("QProgressBar::chunk { background-color: black; }")
         self.status_widget_progress.setRange(0, 100)
         self.status_widget_progress.setValue(100)
-        self.status_widget_layout.update()
 
-        if self.interactive_matching_widget is not None:
-            self.interactive_matching_widget.hide()
-            self.main_widget.show()
-            self.central_widget_layout.removeWidget(self.interactive_matching_widget)
-            self.central_widget_layout.addWidget(self.main_widget)
-            self.interactive_matching_widget.deleteLater()
-            self.interactive_matching_widget = None
-
+        self.show_document_base_viewer_widget()
         self._enable_global_input()
 
     @pyqtSlot(ASETDocumentBase)
     def document_base_to_ui(self, document_base):
         logger.debug("Called slot 'document_base_to_ui'.")
         self.document_base = document_base
-        self.document_base_status_widget.setText("{} documents, {} attributes, {} nuggets".format(
-            len(self.document_base.documents),
-            len(self.document_base.attributes),
-            len(self.document_base.nuggets)
-        ))
-        self.status_widget_layout.update()
 
-        self.main_widget.update_document_base(self.document_base)
+        self.document_base_viewer_widget.update_document_base(self.document_base)
 
         self.save_document_base_to_bson_action.setEnabled(True)
+        self.save_table_to_csv_action.setEnabled(True)
         if self.preprocessing_phase is not None:
-            self.run_matching_phase_action.setEnabled(True)
+            self.run_preprocessing_phase_action.setEnabled(True)
         if self.matching_phase is not None:
             self.run_matching_phase_action.setEnabled(True)
 
@@ -109,8 +84,6 @@ class MainWindow(QMainWindow):
     def preprocessing_phase_to_ui(self, preprocessing_phase):
         logger.debug("Called slot 'preprocessing_phase_to_ui'.")
         self.preprocessing_phase = preprocessing_phase
-
-        self.main_widget.update_preprocessing_phase(self.preprocessing_phase)
 
         self.save_preprocessing_phase_to_config_action.setEnabled(True)
         if self.document_base is not None:
@@ -121,13 +94,11 @@ class MainWindow(QMainWindow):
         logger.debug("Called slot 'matching_phase_to_ui'.")
         self.matching_phase = matching_phase
 
-        self.main_widget.update_matching_phase(matching_phase)
-
         self.save_matching_phase_to_config_action.setEnabled(True)
         if self.document_base is not None:
             self.run_matching_phase_action.setEnabled(True)
 
-    @pyqtSlot(dict)
+    @pyqtSlot(Statistics)
     def statistics_to_ui(self, statistics):
         logger.debug("Called slot 'statistics_to_ui'.")
         self.statistics = statistics
@@ -139,35 +110,34 @@ class MainWindow(QMainWindow):
 
     # noinspection PyUnresolvedReferences
     def _connect_slots_and_signals(self):
-        self.load_document_base_from_bson.connect(self._api.load_document_base_from_bson)
-        self.save_document_base_to_bson.connect(self._api.save_document_base_to_bson)
-        self.load_default_preprocessing_phase.connect(self._api.load_default_preprocessing_phase)
-        self.load_preprocessing_phase_from_config.connect(self._api.load_preprocessing_phase_from_config)
-        self.save_preprocessing_phase_to_config.connect(self._api.save_preprocessing_phase_to_config)
-        self.load_default_matching_phase.connect(self._api.load_default_matching_phase)
-        self.load_matching_phase_from_config.connect(self._api.load_matching_phase_from_config)
-        self.save_matching_phase_to_config.connect(self._api.save_matching_phase_to_config)
-        self.run_preprocessing_phase.connect(self._api.run_preprocessing_phase)
-        self.run_matching_phase.connect(self._api.run_matching_phase)
-        self.save_statistics_to_json.connect(self._api.save_statistics_to_json)
+        self.load_document_base_from_bson.connect(self.api.load_document_base_from_bson)
+        self.save_document_base_to_bson.connect(self.api.save_document_base_to_bson)
+        self.save_table_to_csv.connect(self.api.save_table_to_csv)
+        self.load_default_preprocessing_phase.connect(self.api.load_default_preprocessing_phase)
+        self.load_preprocessing_phase_from_config.connect(self.api.load_preprocessing_phase_from_config)
+        self.save_preprocessing_phase_to_config.connect(self.api.save_preprocessing_phase_to_config)
+        self.load_default_matching_phase.connect(self.api.load_default_matching_phase)
+        self.load_matching_phase_from_config.connect(self.api.load_matching_phase_from_config)
+        self.save_matching_phase_to_config.connect(self.api.save_matching_phase_to_config)
+        self.run_preprocessing_phase.connect(self.api.run_preprocessing_phase)
+        self.run_matching_phase.connect(self.api.run_matching_phase)
+        self.save_statistics_to_json.connect(self.api.save_statistics_to_json)
 
-        self._api.status.connect(self.status)
-        self._api.finished.connect(self.finished)
-        self._api.error.connect(self.error)
-        self._api.document_base_to_ui.connect(self.document_base_to_ui)
-        self._api.preprocessing_phase_to_ui.connect(self.preprocessing_phase_to_ui)
-        self._api.matching_phase_to_ui.connect(self.matching_phase_to_ui)
-        self._api.statistics_to_ui.connect(self.statistics_to_ui)
-        self._api.feedback_request_to_ui.connect(self.feedback_request_to_ui)
+        self.api.status.connect(self.status)
+        self.api.finished.connect(self.finished)
+        self.api.error.connect(self.error)
+        self.api.document_base_to_ui.connect(self.document_base_to_ui)
+        self.api.preprocessing_phase_to_ui.connect(self.preprocessing_phase_to_ui)
+        self.api.matching_phase_to_ui.connect(self.matching_phase_to_ui)
+        self.api.statistics_to_ui.connect(self.statistics_to_ui)
+        self.api.feedback_request_to_ui.connect(self.feedback_request_to_ui)
 
+    ###################
+    # main window logic
+    ###################
     def _enable_global_input(self):
         for action in self._was_enabled:
             action.setEnabled(True)
-
-        self.main_widget.enable_input()
-
-        if self.interactive_matching_widget is not None:
-            self.interactive_matching_widget.enable_input()
 
     def _disable_global_input(self):
         self._was_enabled = []
@@ -175,11 +145,6 @@ class MainWindow(QMainWindow):
             if action.isEnabled():
                 self._was_enabled.append(action)
             action.setEnabled(False)
-
-        self.main_widget.disable_input()
-
-        if self.interactive_matching_widget is not None:
-            self.interactive_matching_widget.disable_input()
 
     def _load_document_base_from_bson(self):
         path = str(QFileDialog.getOpenFileName(self, "Choose a document collection .bson file!")[0])
@@ -195,6 +160,14 @@ class MainWindow(QMainWindow):
                 self._disable_global_input()
                 # noinspection PyUnresolvedReferences
                 self.save_document_base_to_bson.emit(path, self.document_base)
+
+    def _save_table_to_csv(self):
+        if self.document_base is not None:
+            path = str(QFileDialog.getSaveFileName(self, "Choose where to save the table .csv file!")[0])
+            if path != "":
+                self._disable_global_input()
+                # noinspection PyUnresolvedReferences
+                self.save_table_to_csv.emit(path, self.document_base)
 
     def _load_default_preprocessing_phase(self):
         self._disable_global_input()
@@ -238,43 +211,24 @@ class MainWindow(QMainWindow):
 
     def _run_preprocessing_phase(self):
         if self.document_base is not None and self.preprocessing_phase is not None:
-            if self._collect_statistics:
-                self.statistics = {}
-                self.save_statistics_to_json_action.setEnabled(True)
-                self._disable_global_input()
-                # noinspection PyUnresolvedReferences
-                self.run_preprocessing_phase.emit(self.document_base, self.preprocessing_phase, self.statistics)
-            else:
-                self.statistics = None
-                self.save_statistics_to_json_action.setEnabled(False)
-                self._disable_global_input()
-                # noinspection PyUnresolvedReferences
-                self.run_preprocessing_phase.emit(self.document_base, self.preprocessing_phase, None)
+            self.statistics = Statistics(self.collect_statistics)
+            self.save_statistics_to_json_action.setEnabled(self.collect_statistics)
+
+            self._disable_global_input()
+
+            # noinspection PyUnresolvedReferences
+            self.run_preprocessing_phase.emit(self.document_base, self.preprocessing_phase, self.statistics)
 
     def _run_matching_phase(self):
         if self.document_base is not None and self.matching_phase is not None:
-            if self._collect_statistics:
-                self.statistics = {}
-                self.save_statistics_to_json_action.setEnabled(True)
-                self.interactive_matching_widget = InteractiveMatchingWidget(self)
-                self.main_widget.hide()
-                self.interactive_matching_widget.show()
-                self.central_widget_layout.removeWidget(self.main_widget)
-                self.central_widget_layout.addWidget(self.interactive_matching_widget)
-                self._disable_global_input()
-                # noinspection PyUnresolvedReferences
-                self.run_matching_phase.emit(self.document_base, self.matching_phase, self.statistics)
-            else:
-                self.statistics = None
-                self.save_statistics_to_json_action.setEnabled(False)
-                self.interactive_matching_widget = InteractiveMatchingWidget(self)
-                self.main_widget.hide()
-                self.interactive_matching_widget.show()
-                self.central_widget_layout.removeWidget(self.main_widget)
-                self.central_widget_layout.addWidget(self.interactive_matching_widget)
-                self._disable_global_input()
-                # noinspection PyUnresolvedReferences
-                self.run_matching_phase.emit(self.document_base, self.matching_phase, None)
+            self.statistics = Statistics(self.collect_statistics)
+            self.save_statistics_to_json_action.setEnabled(self.collect_statistics)
+
+            self.show_interactive_matching_widget()
+            self._disable_global_input()
+
+            # noinspection PyUnresolvedReferences
+            self.run_matching_phase.emit(self.document_base, self.matching_phase, self.statistics)
 
     def _enable_collect_statistics(self):
         self.collect_statistics = True
@@ -287,16 +241,33 @@ class MainWindow(QMainWindow):
         self.enable_collect_statistics_action.setEnabled(True)
 
     def _save_statistics_to_json(self):
-        if self.statistics is not None:
-            path = str(QFileDialog.getSaveFileName(self, "Choose where to save the statistics .json file!")[0])
-            if path != "":
-                self._disable_global_input()
-                # noinspection PyUnresolvedReferences
-                self.save_statistics_to_json.emit(path, self.statistics)
+        path = str(QFileDialog.getSaveFileName(self, "Choose where to save the statistics .json file!")[0])
+        if path != "":
+            self._disable_global_input()
+            # noinspection PyUnresolvedReferences
+            self.save_statistics_to_json.emit(path, self.statistics)
+
+    def show_document_base_viewer_widget(self):
+        if self.document_base_viewer_widget.isHidden():
+            self.interactive_matching_widget.hide()
+            self.document_base_viewer_widget.show()
+
+            self.central_widget_layout.removeWidget(self.interactive_matching_widget)
+            self.central_widget_layout.addWidget(self.document_base_viewer_widget)
+            self.central_widget_layout.update()
+
+    def show_interactive_matching_widget(self):
+        if self.interactive_matching_widget.isHidden():
+            self.document_base_viewer_widget.hide()
+            self.interactive_matching_widget.show()
+
+            self.central_widget_layout.removeWidget(self.document_base_viewer_widget)
+            self.central_widget_layout.addWidget(self.interactive_matching_widget)
+            self.central_widget_layout.update()
 
     def give_feedback(self, feedback):
-        self._api.feedback = feedback
-        self._feedback_cond.wakeAll()
+        self.api.feedback = feedback
+        self.feedback_cond.wakeAll()
 
     def __init__(self) -> None:
         super(MainWindow, self).__init__()
@@ -305,31 +276,25 @@ class MainWindow(QMainWindow):
         self.document_base = None
         self.preprocessing_phase = None
         self.matching_phase = None
-        self.statistics = None
-        self._collect_statistics = True
+        self.statistics = Statistics(True)
+        self.collect_statistics = True
 
         # set up the api_thread and api and connect slots and signals
-        self._feedback_mutex = QMutex()
-        self._feedback_cond = QWaitCondition()
-        self._api = ASETAPI(self._feedback_mutex, self._feedback_cond)
-        self._api_thread = QThread()
-        self._api.moveToThread(self._api_thread)
+        self.feedback_mutex = QMutex()
+        self.feedback_cond = QWaitCondition()
+        self.api = ASETAPI(self.feedback_mutex, self.feedback_cond)
+        self.api_thread = QThread()
+        self.api.moveToThread(self.api_thread)
         self._connect_slots_and_signals()
-        self._api_thread.start()
+        self.api_thread.start()
 
         # set up the status bar
         self.status_bar = self.statusBar()
         self.status_bar.setFont(STATUS_BAR_FONT)
 
-        self.document_base_status_widget = QLabel(self.status_bar)
-        self.document_base_status_widget.setText("no document base")
-        self.document_base_status_widget.setFont(STATUS_BAR_FONT)
-        self.status_bar.addPermanentWidget(self.document_base_status_widget)
-
         self.status_widget = QWidget(self.status_bar)
-        self.status_widget_layout = QHBoxLayout()
+        self.status_widget_layout = QHBoxLayout(self.status_widget)
         self.status_widget_layout.setContentsMargins(0, 0, 0, 0)
-        self.status_widget.setLayout(self.status_widget_layout)
         self.status_widget_message = QLabel()
         self.status_widget_message.setFont(STATUS_BAR_FONT)
         self.status_widget_message.setMinimumWidth(10)
@@ -363,6 +328,12 @@ class MainWindow(QMainWindow):
         self.save_document_base_to_bson_action.triggered.connect(self._save_document_base_to_bson)
         self.save_document_base_to_bson_action.setEnabled(False)
         self.all_actions.append(self.save_document_base_to_bson_action)
+
+        self.save_table_to_csv_action = QAction("&Save table", self)
+        self.save_table_to_csv_action.setStatusTip("Save the table to a .csv file.")
+        self.save_table_to_csv_action.triggered.connect(self._save_table_to_csv)
+        self.save_table_to_csv_action.setEnabled(False)
+        self.all_actions.append(self.save_table_to_csv_action)
 
         self.load_default_preprocessing_phase_action = QAction("&Load default preprocessing phase", self)
         self.load_default_preprocessing_phase_action.setStatusTip(
@@ -443,9 +414,13 @@ class MainWindow(QMainWindow):
 
         self.file_menu = self.menubar.addMenu("&File")
         self.file_menu.setFont(MENU_FONT)
-        self.file_menu.addAction(self.load_document_base_from_bson_action)
-        self.file_menu.addAction(self.save_document_base_to_bson_action)
         self.file_menu.addAction(self.exit_action)
+
+        self.document_base_menu = self.menubar.addMenu("&Document Base")
+        self.document_base_menu.setFont(MENU_FONT)
+        self.document_base_menu.addAction(self.load_document_base_from_bson_action)
+        self.document_base_menu.addAction(self.save_document_base_to_bson_action)
+        self.document_base_menu.addAction(self.save_table_to_csv_action)
 
         self.preprocessing_menu = self.menubar.addMenu("&Preprocessing")
         self.preprocessing_menu.setFont(MENU_FONT)
@@ -473,58 +448,13 @@ class MainWindow(QMainWindow):
         self.central_widget.setLayout(self.central_widget_layout)
         self.setCentralWidget(self.central_widget)
 
-        self.main_widget = MainWidget(self)
-        self.central_widget_layout.addWidget(self.main_widget)
-        self.interactive_matching_widget = None
+        self.document_base_viewer_widget = DocumentBaseViewerWidget(self)
+        self.interactive_matching_widget = InteractiveMatchingWidget(self)
+
+        self.show_document_base_viewer_widget()
+        self.interactive_matching_widget.hide()
 
         self.resize(1400, 800)
         self.show()
+
         logger.info("Initialized MainWindow.")
-
-
-class MainWidget(QWidget):
-
-    def __init__(self, main_window):
-        super(MainWidget, self).__init__(main_window)
-        layout = QHBoxLayout()
-        self.setLayout(layout)
-
-        horizontal_list = QWidget()
-        horizontal_list_layout = QHBoxLayout()
-        horizontal_list_layout.setContentsMargins(20, 20, 20, 20)
-        horizontal_list.setLayout(horizontal_list_layout)
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameStyle(0)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setWidget(horizontal_list)
-        layout.addWidget(scroll_area)
-
-        self._document_base_viewer = DocumentBaseViewer(self)
-        horizontal_list_layout.addWidget(self._document_base_viewer, 30)
-        self._preprocessing_phase_viewer = PreprocessingPhaseViewer(self)
-        horizontal_list_layout.addWidget(self._preprocessing_phase_viewer, 30)
-        self._matching_phase_viewer = MatchingPhaseViewer(self)
-        horizontal_list_layout.addWidget(self._matching_phase_viewer, 30)
-
-        logger.debug("Initialized MainWidget.")
-
-    def update_document_base(self, document_base):
-        self._document_base_viewer.update_document_base(document_base)
-
-    def update_preprocessing_phase(self, preprocessing_phase):
-        self._preprocessing_phase_viewer.update_preprocessing_phase(preprocessing_phase)
-
-    def update_matching_phase(self, matching_phase):
-        self._matching_phase_viewer.update_matching_phase(matching_phase)
-
-    def enable_input(self):
-        self._document_base_viewer.enable_input()
-        self._preprocessing_phase_viewer.enable_input()
-        self._matching_phase_viewer.enable_input()
-
-    def disable_input(self):
-        self._document_base_viewer.disable_input()
-        self._preprocessing_phase_viewer.disable_input()
-        self._matching_phase_viewer.disable_input()

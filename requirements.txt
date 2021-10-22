@@ -12,3 +12,4 @@ scikit-learn==1.0
 pytest==6.2.5
 transformers==4.9.2
 PyQt6==6.2.0
+flake8==4.0.1

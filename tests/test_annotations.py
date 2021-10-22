@@ -1,6 +1,6 @@
 from typing import Type, Any
 
-from aset.data.annotations import BaseAnnotation, SentenceStartCharsAnnotation
+from aset.data.annotations import BaseAnnotation, SentenceStartCharsAnnotation, CurrentMatchIndexAnnotation
 
 
 def _test_annotation(annotation_class: Type["BaseAnnotation"], value_1: Any, value_2: Any, rep_value: Any) -> None:
@@ -17,9 +17,10 @@ def _test_annotation(annotation_class: Type["BaseAnnotation"], value_1: Any, val
     assert annotation_a != object()
     assert object() != annotation_a
 
-    # test __str__ and __repr__
+    # test __str__, __hash__, and __repr__
     assert str(annotation_a) == str(value_1)
     assert repr(annotation_a) == f"{annotation_class.__name__}({repr(value_1)})"
+    assert hash(annotation_a) == hash(annotation_a.annotation_str)
 
     # test value
     assert annotation_a.value == value_1
@@ -118,3 +119,7 @@ def test_base_annotation() -> None:
 
 def test_sentence_start_chars_annotation() -> None:
     _test_annotation(SentenceStartCharsAnnotation, [1, 2, 3], [3, 10], [0])
+
+
+def test_current_match_index_annotation() -> None:
+    _test_annotation(CurrentMatchIndexAnnotation, 1, 2, 3)

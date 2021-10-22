@@ -1,7 +1,7 @@
 import functools
 import logging
 import time
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Type
 
 import bson
 
@@ -104,6 +104,31 @@ class ASETNugget:
         """Signal values associated with the nugget."""
         return self._signals
 
+    def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
+        if type(item) == str:
+            signal_str: str = item
+        else:
+            signal_str: str = item.signal_str
+
+        if signal_str not in self._signals.keys():
+            assert False, f"No value for signal '{signal_str}'!"
+        return self._signals[signal_str].value
+
+    def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
+        if type(key) == str:
+            signal_str: str = key
+        else:
+            signal_str: str = key.signal_str
+
+        if signal_str not in self._signals.keys():
+            if not isinstance(value, BaseSignal):
+                assert False, f"Signal '{signal_str}' has not been initialized yet!"
+            self._signals[signal_str] = value
+        if isinstance(value, BaseSignal):
+            self._signals[signal_str] = value
+        else:
+            self._signals[signal_str].value = value
+
 
 class ASETAttribute:
     """
@@ -144,6 +169,31 @@ class ASETAttribute:
     def signals(self) -> Dict[str, BaseSignal]:
         """Signal values associated with the attribute."""
         return self._signals
+
+    def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
+        if type(item) == str:
+            signal_str: str = item
+        else:
+            signal_str: str = item.signal_str
+
+        if signal_str not in self._signals.keys():
+            assert False, f"No value for signal '{signal_str}'!"
+        return self._signals[signal_str].value
+
+    def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
+        if type(key) == str:
+            signal_str: str = key
+        else:
+            signal_str: str = key.signal_str
+
+        if signal_str not in self._signals.keys():
+            if not isinstance(value, BaseSignal):
+                assert False, f"Signal '{signal_str}' has not been initialized yet!"
+            self._signals[signal_str] = value
+        if isinstance(value, BaseSignal):
+            self._signals[signal_str] = value
+        else:
+            self._signals[signal_str].value = value
 
 
 class ASETDocument:
@@ -207,6 +257,31 @@ class ASETDocument:
     def annotations(self) -> Dict[str, BaseAnnotation]:
         """Annotation values associated with the document."""
         return self._annotations
+
+    def __getitem__(self, item: Union[str, Type[BaseAnnotation]]) -> Any:
+        if type(item) == str:
+            annotation_str: str = item
+        else:
+            annotation_str: str = item.annotation_str
+
+        if annotation_str not in self._annotations.keys():
+            assert False, f"No value for annotation '{annotation_str}'!"
+        return self._annotations[annotation_str].value
+
+    def __setitem__(self, key: Union[str, Type[BaseAnnotation]], value: Union[BaseAnnotation, Any]):
+        if type(key) == str:
+            annotation_str: str = key
+        else:
+            annotation_str: str = key.annotation_str
+
+        if annotation_str not in self._annotations.keys():
+            if not isinstance(value, BaseAnnotation):
+                assert False, f"Annotation '{annotation_str}' has not been initialized yet!"
+            self._annotations[annotation_str] = value
+        if isinstance(value, BaseAnnotation):
+            self._annotations[annotation_str] = value
+        else:
+            self._annotations[annotation_str].value = value
 
 
 class ASETDocumentBase:

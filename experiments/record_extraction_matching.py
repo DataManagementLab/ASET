@@ -5,14 +5,16 @@ import random
 
 import numpy as np
 
-from aset.data.data import ASETDocumentBase, ASETDocument, ASETAttribute, ASETNugget
+from aset.data.data import ASETDocumentBase, ASETDocument, ASETAttribute
 from aset.matching.distance import SignalsMeanDistance
-from aset.matching.phase import BaseMatchingPhase, TreeSearchMatchingPhase
-from aset.preprocessing.embedding import SBERTTextEmbedder, RelativePositionEmbedder, SBERTExamplesEmbedder, \
-    FastTextLabelEmbedder, BERTContextSentenceEmbedder
+from aset.matching.phase import BaseMatchingPhase, RankingBasedMatchingPhase
+from aset.preprocessing.embedding import SBERTTextEmbedder, RelativePositionEmbedder, FastTextLabelEmbedder, \
+    BERTContextSentenceEmbedder
 from aset.preprocessing.extraction import StanzaNERExtractor
 from aset.preprocessing.phase import PreprocessingPhase
 from aset.resources import ResourceManager
+from aset.statistics import Statistics
+from aset.status import StatusFunction
 from datasets.aviation import aviation as dataset
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -34,33 +36,30 @@ def consider_overlap_as_match(x_start, x_end, y_start, y_end):
 
 if __name__ == "__main__":
     with ResourceManager() as resource_manager:
-        record = {
-            "dataset": {
-                "dataset_name": dataset.NAME,
-                "attributes": dataset.ATTRIBUTES
-            },
-            "preprocessing_phase": {},
-            "matching_phase": {}
-        }
+        statistics = Statistics(do_collect=True)
+        status_fn = StatusFunction(callback_fn=None)
 
         ################################################################################################################
         # dataset
         ################################################################################################################
         documents = dataset.load_dataset()
-        record["dataset"]["num_documents"] = len(documents)
-        record["dataset"]["mentioned"] = {}
+
+        statistics["dataset"]["dataset_name"] = dataset.NAME
+        statistics["dataset"]["attributes"] = dataset.ATTRIBUTES
+        statistics["dataset"]["num_documents"] = len(documents)
+
         for attribute in dataset.ATTRIBUTES:
-            record["dataset"]["mentioned"][attribute] = 0
+            statistics["dataset"]["mentioned"][attribute] = 0
             for document in documents:
                 if document["mentions"][attribute]:
-                    record["dataset"]["mentioned"][attribute] += 1
+                    statistics["dataset"]["mentioned"][attribute] += 1
 
         ################################################################################################################
         # document base
         ################################################################################################################
         # select the "user-provided" attribute names and create mappings between them and the dataset's attribute names
         attribute_names = dataset.ATTRIBUTES
-        record["matching_phase"]["attribute_names"] = attribute_names
+        statistics["user_provided_attribute_names"] = attribute_names
         column_name2attribute_name = {
             column_name: attribute_name for column_name, attribute_name in zip(attribute_names, dataset.ATTRIBUTES)
         }
@@ -92,23 +91,20 @@ if __name__ == "__main__":
             with open("../cache/preprocessing-phase-config.json", "w") as file:
                 json.dump(preprocessing_phase.to_config(), file)
 
-            record["preprocessing_phase"]["config"] = preprocessing_phase.to_config()
-            record["preprocessing_phase"]["statistics"] = {}
+            statistics["preprocessing"]["config"] = preprocessing_phase.to_config()
 
-            preprocessing_phase(document_base, statistics=record["preprocessing_phase"]["statistics"])
+            preprocessing_phase(document_base, status_fn, statistics["preprocessing"]["statistics"])
 
             with open("../cache/unmatched-document-base.bson", "wb") as file:
                 file.write(document_base.to_bson())
         else:
-            record["preprocessing_phase"] = {}
             with open("../cache/preprocessing-phase-config.json", "r") as file:
-                record["preprocessing_phase"]["config"] = json.load(file)
+                statistics["preprocessing"]["config"] = json.load(file)
             with open("../cache/unmatched-document-base.bson", "rb") as file:
                 document_base = ASETDocumentBase.from_bson(file.read())
 
-        record["preprocessing_phase"]["results"] = {}
         for attribute in dataset.ATTRIBUTES:
-            record["preprocessing_phase"]["results"][attribute] = 0
+            statistics["preprocessing"]["results"][attribute] = 0
             for document, aset_document in zip(documents, document_base.documents):
                 match = False
                 for mention in document["mentions"][attribute]:
@@ -118,42 +114,52 @@ if __name__ == "__main__":
                             match = True
                             break
                 if match:
-                    record["preprocessing_phase"]["results"][attribute] += 1
+                    statistics["preprocessing"]["results"][attribute] += 1
 
         ################################################################################################################
         # matching phase
         ################################################################################################################
-        matching_phase = TreeSearchMatchingPhase(
+        # matching_phase = TreeSearchMatchingPhase(
+        #     distance=SignalsMeanDistance(
+        #         signal_strings=[
+        #             "LabelEmbeddingSignal",
+        #             "TextEmbeddingSignal",
+        #             "ContextSentenceEmbeddingSignal",
+        #             "RelativePositionSignal",
+        #             "POSTagsSignal"
+        #         ]
+        #     ),
+        #     examples_embedder=SBERTExamplesEmbedder("SBERTBertLargeNliMeanTokensResource"),
+        #     max_num_feedback=25,
+        #     max_children=2,
+        #     max_distance=0.6,
+        #     exploration_factor=1.2
+        # )
+        matching_phase = RankingBasedMatchingPhase(
             distance=SignalsMeanDistance(
                 signal_strings=[
                     "LabelEmbeddingSignal",
                     "TextEmbeddingSignal",
                     "ContextSentenceEmbeddingSignal",
-                    "RelativePositionSignal",
-                    "POSTagsSignal"
+                    "RelativePositionSignal"  # ,
+                    # "POSTagsSignal"
                 ]
             ),
-            examples_embedder=SBERTExamplesEmbedder("SBERTBertLargeNliMeanTokensResource"),
             max_num_feedback=25,
-            max_children=2,
-            max_distance=0.6,
-            exploration_factor=1.2
+            len_ranked_list=10,
+            max_distance=0.6
         )
+
         with open("../cache/matching-phase-config.json", "w") as file:
             json.dump(matching_phase.to_config(), file)
-        record["matching_phase"]["config"] = matching_phase.to_config()
+        statistics["matching"]["config"] = matching_phase.to_config()
 
-        record["matching_phase"]["num_example_mentions"] = 3
+        statistics["matching"]["num_example_mentions"] = 3
 
-        record["matching_phase"]["runs"] = []
         # random seeds have been randomly chosen once from [0, 1000000]
         random_seeds = [200488, 422329, 449756, 739608, 983889, 836016, 264198, 908457, 205619, 461905]
         for run, random_seed in enumerate(random_seeds):
             print("\n\n\nExecuting run {}.".format(run + 1))
-            run_record = {
-                "statistics": {},
-                "results": {}
-            }
 
             # load the document base
             with open("../cache/unmatched-document-base.bson", "rb") as file:
@@ -175,130 +181,179 @@ if __name__ == "__main__":
                         possible_mentions.append(document["text"][mention["start_char"]:mention["end_char"]])
 
                 sampled_mentions = []
-                while len(sampled_mentions) < record["matching_phase"]["num_example_mentions"] and possible_mentions:
+                while len(sampled_mentions) < statistics["matching"]["num_example_mentions"] and possible_mentions:
                     example_mention = random.choice(possible_mentions)
                     possible_mentions.remove(example_mention)
                     sampled_mentions.append(example_mention)
 
                 example_mentions[attribute_name] = sampled_mentions
-                run_record["example_mentions"] = example_mentions
-
-
-            def automatic_examples_fn(attr: ASETAttribute):
-                return example_mentions[attr.name]
-
+                statistics["matching"]["runs"][str(run)]["example_mentions"] = example_mentions
 
             # engage the matching phase
             with open("../cache/matching-phase-config.json", "r") as file:
                 matching_phase = BaseMatchingPhase.from_config(json.load(file))
 
 
-            def automatic_feedback_fn(nug: ASETNugget, attr: ASETAttribute):
+            # for TreeSearchMatchingPhase
+            # def automatic_feedback_fn(feedback_request):
+            #     if feedback_request["message"] == "give-feedback":
+            #         nug = feedback_request["nugget"]
+            #         attr = feedback_request["attribute"]
+            #
+            #         attr_name = column_name2attribute_name[attr.name]
+            #         doc = None
+            #         for d in documents:
+            #             if d["id"] == nug.document.name:
+            #                 doc = d
+            #
+            #         match = False
+            #         for mention in doc["mentions"][attr_name]:
+            #             if consider_overlap_as_match(mention["start_char"], mention["end_char"],
+            #                                          nug.start_char, nug.end_char):
+            #                 match = True
+            #                 break
+            #         if not match:
+            #             for mention in doc["mentions_same_attribute_class"][attr_name]:
+            #                 if consider_overlap_as_match(mention["start_char"], mention["end_char"],
+            #                                              nug.start_char, nug.end_char):
+            #                     match = True
+            #                     break
+            #
+            #         print("[{:3.3}] '{}'? '{}' ==> {}".format(
+            #             str(run + 1),
+            #             attr.name,
+            #             nug.text,
+            #             "yes" if match else "no"
+            #         ))
+            #
+            #         return {"feedback": match}
+            #
+            #     elif feedback_request["message"] == "give-examples":
+            #         attr = feedback_request["attribute"]
+            #         return {"examples": example_mentions[attr.name]}
+            #     else:
+            #         assert False, f"Unknown message '{feedback_request['message']}'!"
+
+            # for RankingBasedMatchingPhase
+            def automatic_feedback_fn(feedback_request):
+                nuggets = feedback_request["nuggets"]
+                attr = feedback_request["attribute"]
+
                 attr_name = column_name2attribute_name[attr.name]
-                doc = None
-                for d in documents:
-                    if d["id"] == nug.document.name:
-                        doc = d
 
-                match = False
-                for mention in doc["mentions"][attr_name]:
-                    if consider_overlap_as_match(mention["start_char"], mention["end_char"],
-                                                 nug.start_char, nug.end_char):
-                        match = True
-                        break
-                if not match:
-                    for mention in doc["mentions_same_attribute_class"][attr_name]:
-                        if consider_overlap_as_match(mention["start_char"], mention["end_char"],
-                                                     nug.start_char, nug.end_char):
-                            match = True
+                # user always gives feedback on first incorrect nugget guess if there is one
+                for nug in nuggets:
+                    doc = None
+                    for d in documents:
+                        if d["id"] == nug.document.name:
+                            doc = d
+
+                    for men in doc["mentions"][attr_name]:
+                        if consider_overlap_as_match(nug.start_char, nug.end_char,
+                                                     men["start_char"], men["end_char"]):
                             break
-
-                print("[{:3.3}] '{}'? '{}' ==> {}".format(
-                    str(run + 1),
-                    attr.name,
-                    nug.text,
-                    "yes" if match else "no"
-                ))
-
-                return match
+                    else:
+                        # nug is an incorrect nugget guess
+                        for n in nug.document.nuggets:
+                            for men in doc["mentions"][attr_name]:
+                                if consider_overlap_as_match(n.start_char, n.end_char,
+                                                             men["start_char"], men["end_char"]):
+                                    # there is a matching nugget in nug's document
+                                    print(f"{attr_name}, RETURN OTHER MATCHING NUGGET")
+                                    return {
+                                        "message": "is-match",
+                                        "nugget": n
+                                    }
+                        else:
+                            # there is no matching nugget in nug's document
+                            print(f"{attr_name}, NO MATCH IN DOCUMENT")
+                            return {
+                                "message": "no-match-in-document",
+                                "nugget": nug
+                            }
+                else:
+                    # all nuggets are matches
+                    print(f"{attr_name}, IS MATCH")
+                    return {
+                        "message": "is-match",
+                        "nugget": nuggets[0]
+                    }
 
 
             matching_phase(
                 document_base,
                 automatic_feedback_fn,
-                automatic_examples_fn,
-                statistics=run_record["statistics"]
+                status_fn,
+                statistics["matching"]["runs"][str(run)]["statistics"]
             )
 
             # evaluate the matching process
             for attribute, attribute_name in zip(dataset.ATTRIBUTES, attribute_names):
-                run_record["results"][attribute] = {
-                    "num_should_be_empty_is_empty": 0,
-                    "num_should_be_empty_is_full": 0,
-                    "num_should_be_filled_is_empty": 0,
-                    "num_should_be_filled_is_correct": 0,
-                    "num_should_be_filled_is_incorrect": 0
-                }
+                results = statistics["matching"]["runs"][str(run)]["results"][attribute]
+                results["num_should_be_filled_is_empty"] = 0
+                results["num_should_be_filled_is_correct"] = 0
+                results["num_should_be_filled_is_incorrect"] = 0
+                results["num_should_be_empty_is_empty"] = 0
+                results["num_should_be_empty_is_full"] = 0
 
                 for document, aset_document in zip(documents, document_base.documents):
                     found_nuggets = aset_document.attribute_mappings[attribute_name]
 
                     if document["mentions"][attribute]:  # document states cell's value
                         if found_nuggets == []:
-                            run_record["results"][attribute]["num_should_be_filled_is_empty"] += 1
+                            results["num_should_be_filled_is_empty"] += 1
                         else:
                             found_nugget = found_nuggets[0]  # TODO: evaluate if there is more than one found nugget
                             for mention in document["mentions"][attribute]:
-                                if consider_overlap_as_match(mention["start_char"], mention["end_char"],
-                                                             found_nugget.start_char, found_nugget.end_char):
-                                    run_record["results"][attribute]["num_should_be_filled_is_correct"] += 1
+                                if consider_overlap_as_match(
+                                        mention["start_char"],
+                                        mention["end_char"],
+                                        found_nugget.start_char,
+                                        found_nugget.end_char
+                                ):
+                                    results["num_should_be_filled_is_correct"] += 1
                                     break
                             else:
-                                run_record["results"][attribute]["num_should_be_filled_is_incorrect"] += 1
+                                results["num_should_be_filled_is_incorrect"] += 1
 
                     else:  # document does not state cell's value
                         if found_nuggets == []:
-                            run_record["results"][attribute]["num_should_be_empty_is_empty"] += 1
+                            results["num_should_be_empty_is_empty"] += 1
                         else:
-                            run_record["results"][attribute]["num_should_be_empty_is_full"] += 1
+                            results["num_should_be_empty_is_full"] += 1
 
                 # compute the evaluation metrics
-                run_record["results"][attribute]["recall"] = \
-                    run_record["results"][attribute]["num_should_be_filled_is_correct"] / (
-                            run_record["results"][attribute]["num_should_be_filled_is_correct"] +
-                            run_record["results"][attribute]["num_should_be_filled_is_incorrect"] +
-                            run_record["results"][attribute]["num_should_be_filled_is_empty"])
+                results["recall"] = \
+                    results["num_should_be_filled_is_correct"] / (
+                            results["num_should_be_filled_is_correct"]
+                            + results["num_should_be_filled_is_incorrect"]
+                            + results["num_should_be_filled_is_empty"]
+                    )
 
-                if (run_record["results"][attribute]["num_should_be_filled_is_correct"] +
-                    run_record["results"][attribute]["num_should_be_filled_is_incorrect"]) == 0:
-                    run_record["results"][attribute]["precision"] = 1
+                if (results["num_should_be_filled_is_correct"] + results["num_should_be_filled_is_incorrect"]) == 0:
+                    results["precision"] = 1
                 else:
-                    run_record["results"][attribute]["precision"] = \
-                        run_record["results"][attribute]["num_should_be_filled_is_correct"] / (
-                                run_record["results"][attribute]["num_should_be_filled_is_correct"] +
-                                run_record["results"][attribute]["num_should_be_filled_is_incorrect"])
+                    results["precision"] = results["num_should_be_filled_is_correct"] / (
+                            results["num_should_be_filled_is_correct"]
+                            + results["num_should_be_filled_is_incorrect"]
+                    )
 
-                precision = run_record["results"][attribute]["precision"]
-                recall = run_record["results"][attribute]["recall"]
-                if precision + recall == 0:
-                    run_record["results"][attribute]["f1_score"] = 0
+                if results["precision"] + results["recall"] == 0:
+                    results["f1_score"] = 0
                 else:
-                    run_record["results"][attribute]["f1_score"] = 2 * precision * recall / (precision + recall)
-
-            record["matching_phase"]["runs"].append(run_record)
+                    results["f1_score"] = 2 * results["precision"] * results["recall"] \
+                                          / (results["precision"] + results["recall"])
 
         # compute the results as the median
-        record["matching_phase"]["results"] = {}
         for attribute in dataset.ATTRIBUTES:
-            record["matching_phase"]["results"][attribute] = {}
             for score in ["recall", "precision", "f1_score"]:
-                values = [res["results"][attribute][score] for res in record["matching_phase"]["runs"]]
-                record["matching_phase"]["results"][attribute][score] = np.median(values)
+                values = [res["results"][attribute][score] for res in statistics["matching"]["runs"].all_values()]
+                statistics["matching"]["results"][attribute][score] = np.median(values)
 
         ################################################################################################################
         # store the results
         ################################################################################################################
         if not os.path.isdir(f"results/{dataset.NAME}"):
             os.makedirs(f"results/{dataset.NAME}", exist_ok=True)
-        with open(f"results/{dataset.NAME}/" + "aset-stanza-dfs" + ".json", "w") as file:
-            json.dump(record, file)
+        with open(f"results/{dataset.NAME}/" + "aset-stanza-ranking" + ".json", "w") as file:
+            json.dump(statistics.to_serializable(), file)

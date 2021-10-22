@@ -1,12 +1,14 @@
 import logging
 import time
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List
 
 from aset.config import ConfigurableElement
 from aset.data.data import ASETDocumentBase
 from aset.preprocessing.embedding import BaseEmbedder
 from aset.preprocessing.extraction import BaseExtractor
 from aset.preprocessing.normalization import BaseNormalizer
+from aset.statistics import Statistics
+from aset.status import StatusFunction
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -36,7 +38,7 @@ class PreprocessingPhase(ConfigurableElement):
         self._normalizers: List[BaseNormalizer] = normalizers
         self._embedders: List[BaseEmbedder] = embedders
 
-        logger.debug(f"Initialized preprocessing phase.")
+        logger.debug("Initialized preprocessing phase.")
 
     def __str__(self) -> str:
         extractors_str: str = "\n".join(f"- {extractor.extractor_str}" for extractor in self._extractors)
@@ -55,98 +57,33 @@ class PreprocessingPhase(ConfigurableElement):
     def __call__(
             self,
             document_base: ASETDocumentBase,
-            status_fn: Optional[Callable[[str, float], None]] = None,
-            statistics: Optional[Dict[str, Any]] = None
+            status_fn: StatusFunction,
+            statistics: Statistics
     ) -> None:
         """
         Apply the preprocessing phase on the given document base.
 
         :param document_base: document base to preprocess
         :param status_fn: callback function to communicate current status (message and progress)
-        :param statistics: record to collect statistics
+        :param statistics: statistics object to collect statistics
         """
         logger.info(f"Execute preprocessing phase on document base with {len(document_base.documents)} documents "
                     f"and {len(document_base.attributes)} attributes.")
-
-        total_time: float = 0
-        if statistics is not None:
-            statistics["extractors"] = []
-            statistics["normalizers"] = []
-            statistics["embedders"] = []
+        tick: float = time.time()
+        status_fn("Running preprocessing phase...", -1)
 
         for ix, extractor in enumerate(self._extractors):
-            logger.info(f"Execute extractor [{ix + 1}/{len(self._extractors)}] '{extractor.extractor_str}'.")
-            tick: float = time.time()
-
-            if statistics is not None:
-                extractor_statistics: Dict[str, Any] = {"extractor_str": extractor.extractor_str}
-                if status_fn is not None:
-                    status_fn(f"Running {extractor.extractor_str}...", -1)
-                extractor(document_base, status_fn, extractor_statistics)
-                if status_fn is not None:
-                    status_fn(f"Running {extractor.extractor_str}...", 1)
-                statistics["extractors"].append(extractor_statistics)
-            else:
-                if status_fn is not None:
-                    status_fn(f"Running {extractor.extractor_str}...", -1)
-                extractor(document_base, status_fn)
-                if status_fn is not None:
-                    status_fn(f"Running {extractor.extractor_str}...", 1)
-
-            tack: float = time.time()
-            total_time += tack - tick
-            logger.info(f"Executed extractor [{ix + 1}/{len(self._extractors)}] '{extractor.extractor_str}' "
-                        f"in {tack - tick} seconds.")
+            extractor(document_base, status_fn, statistics[f"extractor-{ix}"])
 
         for ix, normalizer in enumerate(self._normalizers):
-            logger.info(f"Execute normalizer [{ix + 1}/{len(self._normalizers)}] '{normalizer.normalizer_str}'.")
-            tick: float = time.time()
-
-            if statistics is not None:
-                normalizer_statistics: Dict[str, Any] = {"normalizer_str": normalizer.normalizer_str}
-                if status_fn is not None:
-                    status_fn(f"Running {normalizer.normalizer_str}...", -1)
-                normalizer(document_base, status_fn, normalizer_statistics)
-                if status_fn is not None:
-                    status_fn(f"Running {normalizer.normalizer_str}...", 1)
-                statistics["normalizers"].append(normalizer_statistics)
-            else:
-                if status_fn is not None:
-                    status_fn(f"Running {normalizer.normalizer_str}...", -1)
-                normalizer(document_base, status_fn)
-                if status_fn is not None:
-                    status_fn(f"Running {normalizer.normalizer_str}...", 1)
-
-            tack: float = time.time()
-            total_time += tack - tick
-            logger.info(f"Executed normalizer [{ix + 1}/{len(self._normalizers)}] '{normalizer.normalizer_str}' "
-                        f"in {tack - tick} seconds.")
+            normalizer(document_base, status_fn, statistics[f"normalizer-{ix}"])
 
         for ix, embedder in enumerate(self._embedders):
-            logger.info(f"Execute embedder [{ix + 1}/{len(self._embedders)}] '{embedder.embedder_str}'.")
-            tick: float = time.time()
+            embedder(document_base, status_fn, statistics[f"embedder-{ix}"])
 
-            if statistics is not None:
-                embedder_statistics: Dict[str, Any] = {"embedder_str": embedder.embedder_str}
-                if status_fn is not None:
-                    status_fn(f"Running {embedder.embedder_str}...", -1)
-                embedder(document_base, status_fn, embedder_statistics)
-                if status_fn is not None:
-                    status_fn(f"Running {embedder.embedder_str}...", 1)
-                statistics["embedders"].append(embedder_statistics)
-            else:
-                if status_fn is not None:
-                    status_fn(f"Running {embedder.embedder_str}...", -1)
-                embedder(document_base, status_fn)
-                if status_fn is not None:
-                    status_fn(f"Running {embedder.embedder_str}...", 1)
-
-            tack: float = time.time()
-            total_time += tack - tick
-            logger.info(f"Executed embedder [{ix + 1}/{len(self._embedders)}] '{embedder.embedder_str}' "
-                        f"in {tack - tick} seconds.")
-
-        logger.info(f"Executed preprocessing phase in {total_time} seconds.")
+        status_fn("Running preprocessing phase...", 1)
+        tack: float = time.time()
+        logger.info(f"Executed preprocessing phase in {tack - tick} seconds.")
 
     @property
     def extractors(self) -> List[BaseExtractor]:
