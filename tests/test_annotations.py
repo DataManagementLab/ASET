@@ -1,6 +1,6 @@
-from typing import Type, Any
+from typing import Any, Type
 
-from aset.data.annotations import BaseAnnotation, SentenceStartCharsAnnotation, CurrentMatchIndexAnnotation
+from aset.data.annotations import BaseAnnotation, CurrentMatchIndexAnnotation, SentenceStartCharsAnnotation
 
 
 def _test_annotation(annotation_class: Type["BaseAnnotation"], value_1: Any, value_2: Any, rep_value: Any) -> None:

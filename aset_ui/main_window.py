@@ -1,17 +1,18 @@
 import logging
 
-from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QMutex, QWaitCondition
+from PyQt6.QtCore import QMutex, Qt, QThread, QWaitCondition, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QLabel, QProgressBar, QApplication, QFileDialog
+from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, \
+    QVBoxLayout, QWidget
 
 from aset.data.data import ASETDocumentBase
 from aset.matching.phase import BaseMatchingPhase
 from aset.preprocessing.phase import PreprocessingPhase
 from aset.statistics import Statistics
 from aset_ui.aset_api import ASETAPI
-from aset_ui.document_base_viewer import DocumentBaseViewerWidget
+from aset_ui.document_base import CreateDocumentBaseWidget, DocumentBaseViewerWidget
 from aset_ui.interactive_matching import InteractiveMatchingWidget
-from aset_ui.style import MENU_FONT, STATUS_BAR_FONT
+from aset_ui.style import BUTTON_FONT, HEADER_FONT, MENU_FONT, STATUS_BAR_FONT
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class MainWindow(QMainWindow):
     ################################
     # signals (aset ui --> aset api)
     ################################
+    create_document_base = pyqtSignal(str, list)
     load_document_base_from_bson = pyqtSignal(str)
     save_document_base_to_bson = pyqtSignal(str, ASETDocumentBase)
     save_table_to_csv = pyqtSignal(str, ASETDocumentBase)
@@ -110,6 +112,7 @@ class MainWindow(QMainWindow):
 
     # noinspection PyUnresolvedReferences
     def _connect_slots_and_signals(self):
+        self.create_document_base.connect(self.api.create_document_base)
         self.load_document_base_from_bson.connect(self.api.load_document_base_from_bson)
         self.save_document_base_to_bson.connect(self.api.save_document_base_to_bson)
         self.save_table_to_csv.connect(self.api.save_table_to_csv)
@@ -145,6 +148,9 @@ class MainWindow(QMainWindow):
             if action.isEnabled():
                 self._was_enabled.append(action)
             action.setEnabled(False)
+
+    def _create_document_base(self):
+        self.show_create_document_base_widget()
 
     def _load_document_base_from_bson(self):
         path = str(QFileDialog.getOpenFileName(self, "Choose a document collection .bson file!")[0])
@@ -249,25 +255,51 @@ class MainWindow(QMainWindow):
 
     def show_document_base_viewer_widget(self):
         if self.document_base_viewer_widget.isHidden():
+            self.start_menu_widget.hide()
             self.interactive_matching_widget.hide()
-            self.document_base_viewer_widget.show()
+            self.create_document_base_widget.hide()
 
+            self.central_widget_layout.removeWidget(self.start_menu_widget)
             self.central_widget_layout.removeWidget(self.interactive_matching_widget)
+            self.central_widget_layout.removeWidget(self.create_document_base_widget)
             self.central_widget_layout.addWidget(self.document_base_viewer_widget)
+            self.document_base_viewer_widget.show()
             self.central_widget_layout.update()
 
     def show_interactive_matching_widget(self):
         if self.interactive_matching_widget.isHidden():
+            self.start_menu_widget.hide()
             self.document_base_viewer_widget.hide()
-            self.interactive_matching_widget.show()
+            self.create_document_base_widget.hide()
 
+            self.central_widget_layout.removeWidget(self.start_menu_widget)
             self.central_widget_layout.removeWidget(self.document_base_viewer_widget)
+            self.central_widget_layout.removeWidget(self.create_document_base_widget)
             self.central_widget_layout.addWidget(self.interactive_matching_widget)
+            self.interactive_matching_widget.show()
+            self.central_widget_layout.update()
+
+    def show_create_document_base_widget(self):
+        if self.create_document_base_widget.isHidden():
+            self.start_menu_widget.hide()
+            self.document_base_viewer_widget.hide()
+            self.interactive_matching_widget.hide()
+
+            self.central_widget_layout.removeWidget(self.start_menu_widget)
+            self.central_widget_layout.removeWidget(self.document_base_viewer_widget)
+            self.central_widget_layout.removeWidget(self.interactive_matching_widget)
+            self.central_widget_layout.addWidget(self.create_document_base_widget)
+            self.create_document_base_widget.show()
             self.central_widget_layout.update()
 
     def give_feedback(self, feedback):
         self.api.feedback = feedback
         self.feedback_cond.wakeAll()
+
+    def create_new_document_base(self, path, attribute_names):
+        self._disable_global_input()
+        # noinspection PyUnresolvedReferences
+        self.create_document_base.emit(path, attribute_names)
 
     def __init__(self) -> None:
         super(MainWindow, self).__init__()
@@ -316,6 +348,13 @@ class MainWindow(QMainWindow):
         self.exit_action.triggered.connect(QApplication.instance().quit)
         self.all_actions.append(self.exit_action)
 
+        self.create_document_base_action = QAction("&Create document base", self)
+        self.create_document_base_action.setStatusTip(
+            "Create a new document base from a collection of .txt files and a list of attribute names."
+        )
+        self.create_document_base_action.triggered.connect(self._create_document_base)
+        self.all_actions.append(self.create_document_base_action)
+
         self.load_document_base_from_bson_action = QAction("&Load document base", self)
         self.load_document_base_from_bson_action.setShortcut("Ctrl+O")
         self.load_document_base_from_bson_action.setStatusTip("Load the document base from a .bson file.")
@@ -336,9 +375,7 @@ class MainWindow(QMainWindow):
         self.all_actions.append(self.save_table_to_csv_action)
 
         self.load_default_preprocessing_phase_action = QAction("&Load default preprocessing phase", self)
-        self.load_default_preprocessing_phase_action.setStatusTip(
-            "Load the default preprocessing phase."
-        )
+        self.load_default_preprocessing_phase_action.setStatusTip("Load the default preprocessing phase.")
         self.load_default_preprocessing_phase_action.triggered.connect(self._load_default_preprocessing_phase)
         self.all_actions.append(self.load_default_preprocessing_phase_action)
 
@@ -364,9 +401,7 @@ class MainWindow(QMainWindow):
         self.all_actions.append(self.run_preprocessing_phase_action)
 
         self.load_default_matching_phase_action = QAction("&Load default matching phase", self)
-        self.load_default_matching_phase_action.setStatusTip(
-            "Load the default matching phase."
-        )
+        self.load_default_matching_phase_action.setStatusTip("Load the default matching phase.")
         self.load_default_matching_phase_action.triggered.connect(self._load_default_matching_phase)
         self.all_actions.append(self.load_default_matching_phase_action)
 
@@ -378,9 +413,7 @@ class MainWindow(QMainWindow):
         self.all_actions.append(self.load_matching_phase_from_config_action)
 
         self.save_matching_phase_to_config_action = QAction("&Save matching phase", self)
-        self.save_matching_phase_to_config_action.setStatusTip(
-            "Save the matching phase in a .json configuration file."
-        )
+        self.save_matching_phase_to_config_action.setStatusTip("Save the matching phase in a .json configuration file.")
         self.save_matching_phase_to_config_action.triggered.connect(self._save_matching_phase_to_config)
         self.save_matching_phase_to_config_action.setEnabled(False)
         self.all_actions.append(self.save_matching_phase_to_config_action)
@@ -418,6 +451,7 @@ class MainWindow(QMainWindow):
 
         self.document_base_menu = self.menubar.addMenu("&Document Base")
         self.document_base_menu.setFont(MENU_FONT)
+        self.document_base_menu.addAction(self.create_document_base_action)
         self.document_base_menu.addAction(self.load_document_base_from_bson_action)
         self.document_base_menu.addAction(self.save_document_base_to_bson_action)
         self.document_base_menu.addAction(self.save_table_to_csv_action)
@@ -442,17 +476,44 @@ class MainWindow(QMainWindow):
         self.statistics_menu.addAction(self.disable_collect_statistics_action)
         self.statistics_menu.addAction(self.save_statistics_to_json_action)
 
+        # start menu
+        self.start_menu_widget = QWidget()
+        self.start_menu_layout = QVBoxLayout(self.start_menu_widget)
+        self.start_menu_layout.setContentsMargins(0, 0, 0, 0)
+        self.start_menu_layout.setSpacing(20)
+        self.start_menu_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.start_menu_widget.setMaximumWidth(400)
+
+        self.start_menu_header = QLabel("Welcome to ASET!")
+        self.start_menu_header.setFont(HEADER_FONT)
+        self.start_menu_layout.addWidget(self.start_menu_header)
+
+        self.create_document_base_button = QPushButton("Create a new Document Base")
+        self.create_document_base_button.setFont(BUTTON_FONT)
+        self.create_document_base_button.clicked.connect(self._create_document_base)
+        self.start_menu_layout.addWidget(self.create_document_base_button)
+
+        self.load_document_base_button = QPushButton("Load an existing Document Base")
+        self.load_document_base_button.setFont(BUTTON_FONT)
+        self.load_document_base_button.clicked.connect(self._load_document_base_from_bson)
+        self.start_menu_layout.addWidget(self.load_document_base_button)
+
         # main UI
         self.central_widget = QWidget(self)
         self.central_widget_layout = QHBoxLayout()
+        self.central_widget_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.central_widget.setLayout(self.central_widget_layout)
         self.setCentralWidget(self.central_widget)
 
+        self.create_document_base_widget = CreateDocumentBaseWidget(self)
         self.document_base_viewer_widget = DocumentBaseViewerWidget(self)
         self.interactive_matching_widget = InteractiveMatchingWidget(self)
 
-        self.show_document_base_viewer_widget()
+        self.create_document_base_widget.hide()
+        self.document_base_viewer_widget.hide()
         self.interactive_matching_widget.hide()
+        self.central_widget_layout.addWidget(self.start_menu_widget)
+        self.central_widget_layout.update()
 
         self.resize(1400, 800)
         self.show()

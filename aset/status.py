@@ -1,11 +1,10 @@
 import logging
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
 class StatusFunction:
-
     def __init__(self, callback_fn: Optional[Callable[[str, float], None]] = None) -> None:
         super(StatusFunction, self).__init__()
         self._callback_fn: Optional[Callable[[str, float], None]] = callback_fn

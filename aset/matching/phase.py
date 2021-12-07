@@ -2,15 +2,16 @@ import abc
 import logging
 import random
 import time
-from typing import Dict, Any, Callable, List, Type
+from typing import Any, Callable, Dict, List, Type
 
 import numpy as np
 from scipy.special import softmax
 
 from aset.config import ConfigurableElement
-from aset.data.annotations import SentenceStartCharsAnnotation, CurrentMatchIndexAnnotation
-from aset.data.data import ASETDocumentBase, ASETNugget, ASETDocument
-from aset.data.signals import CachedDistanceSignal, UserProvidedExamplesSignal, CachedContextSentenceSignal
+from aset.data.annotations import CurrentMatchIndexAnnotation, SentenceStartCharsAnnotation
+from aset.data.data import ASETDocument, ASETDocumentBase, ASETNugget
+from aset.data.signals import CachedContextSentenceSignal, CachedDistanceSignal, TreePredecessorSignal, \
+    UserProvidedExamplesSignal
 from aset.matching.distance import BaseDistance
 from aset.preprocessing.embedding import BaseEmbedder
 from aset.statistics import Statistics
@@ -34,6 +35,7 @@ class BaseMatchingPhase(ConfigurableElement, abc.ABC):
     This is the base class for all matching phases. Each matching phase is a configurable element. Different matching
     phases may have different '__call__' method signatures.
     """
+
     matching_phase_str: str = "BaseMatchingPhase"
 
     def __str__(self) -> str:
@@ -77,6 +79,7 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
 
     works with signals: UserProvidedExamplesSignal, CachedDistanceSignal
     """
+
     matching_phase_str: str = "TreeSearchMatchingPhase"
 
     def __init__(
@@ -114,8 +117,10 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
             status_fn: StatusFunction,
             statistics: Statistics
     ) -> None:
-        logger.info(f"Execute matching phase '{self.matching_phase_str}' on document base with "
-                    f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes.")
+        logger.info(
+            f"Execute matching phase '{self.matching_phase_str}' on document base with "
+            f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes."
+        )
         tick: float = time.time()
         status_fn(f"Running {self.matching_phase_str}...", -1)
 
@@ -125,10 +130,7 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
 
         # incorporate examples
         for attribute in document_base.attributes:
-            feedback_result: Dict[str, Any] = feedback_fn({
-                "message": "give-examples",
-                "attribute": attribute
-            })
+            feedback_result: Dict[str, Any] = feedback_fn({"message": "give-examples", "attribute": attribute})
             examples: List[str] = feedback_result["examples"]
             statistics["examples"][attribute.name] = examples
             attribute[UserProvidedExamplesSignal] = UserProvidedExamplesSignal(examples)
@@ -142,6 +144,7 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
         for attribute in document_base.attributes:
             logger.info(f"Match attribute '{attribute.name}'.")
             tik: float = time.time()
+            self._distance.next_attribute()
 
             num_feedback: int = 0
 
@@ -154,9 +157,7 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
             if document_base.nuggets != []:
 
                 distances: np.ndarray = self._distance.compute_distances(
-                    [attribute],
-                    document_base.nuggets,
-                    statistics["distance"]
+                    [attribute], document_base.nuggets, statistics["distance"]
                 )
 
                 for nugget, distance in zip(document_base.nuggets, distances[0]):
@@ -169,22 +170,26 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
                 root_iteration: int = 1
                 while queue == [] and num_feedback < self._max_num_feedback:
                     temperature: float = 0.001 * (root_iteration ** 2)
-                    weights: List[float] = \
-                        [(1 - nugget[CachedDistanceSignal]) / temperature for nugget in remaining_nuggets]
+                    weights: List[float] = [
+                        (1 - nugget[CachedDistanceSignal]) / temperature for nugget in remaining_nuggets
+                    ]
                     softmax_weights: np.ndarray = softmax(weights)
 
                     nugget: ASETNugget = random.choices(remaining_nuggets, weights=softmax_weights)[0]
 
                     num_feedback += 1
-                    feedback_result: Dict[str, Any] = feedback_fn({
-                        "message": "give-feedback",
-                        "nugget": nugget,
-                        "attribute": attribute
-                    })
+                    feedback_result: Dict[str, Any] = feedback_fn(
+                        {
+                            "message": "give-feedback",
+                            "nugget": nugget,
+                            "attribute": attribute
+                        }
+                    )
                     if feedback_result["feedback"]:
                         statistics["attributes"][attribute.name]["positive_feedback"] += 1
-                        remaining_nuggets: List[ASETNugget] = \
-                            [n for n in remaining_nuggets if n.document is not nugget.document]
+                        remaining_nuggets: List[ASETNugget] = [
+                            n for n in remaining_nuggets if n.document is not nugget.document
+                        ]
                         matching_nuggets.append(nugget)
                         queue.append(nugget)
                     else:
@@ -205,11 +210,7 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
                     distance: float = 1
                     for nug in matching_nuggets:
                         if nug is not nugget:
-                            dist: float = self._distance.compute_distance(
-                                nugget,
-                                nug,
-                                statistics["distance"]
-                            )
+                            dist: float = self._distance.compute_distance(nugget, nug, statistics["distance"])
                             if dist < distance:
                                 distance: float = dist
 
@@ -220,9 +221,7 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
                     samples: List[ASETNugget] = []
                     if remaining_nuggets != []:
                         new_distances: np.ndarray = self._distance.compute_distances(
-                            [nugget],
-                            remaining_nuggets,
-                            statistics["distance"]
+                            [nugget], remaining_nuggets, statistics["distance"]
                         )
                         for nug, new_dist in zip(remaining_nuggets, new_distances[0]):
                             # explore only if closer to this one than to any other one
@@ -231,11 +230,8 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
                                 if new_dist / self._exploration_factor > distance:  # explore farther away
                                     samples.append(nug)
 
-                    samples: List[ASETNugget] = sorted(
-                        samples,
-                        key=lambda x: x[CachedDistanceSignal]
-                    )
-                    samples: List[ASETNugget] = samples[:self._max_children]
+                    samples: List[ASETNugget] = sorted(samples, key=lambda x: x[CachedDistanceSignal])
+                    samples: List[ASETNugget] = samples[: self._max_children]
 
                     # query the user about the samples
                     new_matching: List[ASETNugget] = []
@@ -257,16 +253,15 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
                     # update queue and remaining
                     queue += new_matching
                     for nug in new_matching:
-                        remaining_nuggets: List[ASETNugget] = \
-                            [n for n in remaining_nuggets if n.document is not nug.document]
+                        remaining_nuggets: List[ASETNugget] = [
+                            n for n in remaining_nuggets if n.document is not nug.document
+                        ]
 
             # update the distances with the remaining stack
             for nugget in queue:
                 if remaining_nuggets != []:
                     new_distances: np.ndarray = self._distance.compute_distances(
-                        [nugget],
-                        remaining_nuggets,
-                        statistics["distance"]
+                        [nugget], remaining_nuggets, statistics["distance"]
                     )
                     for nug, new_dist in zip(remaining_nuggets, new_distances[0]):
                         if new_dist < nug[CachedDistanceSignal]:
@@ -284,8 +279,10 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
                     nugget.document.attribute_mappings[attribute.name] = []
                 existing_nuggets: List[ASETNugget] = nugget.document.attribute_mappings[attribute.name]
 
-                if existing_nuggets == [] or \
-                        (distance < existing_nuggets[0][CachedDistanceSignal] and distance < self._max_distance):
+                if existing_nuggets == [] or (
+                        distance < existing_nuggets[0][CachedDistanceSignal]
+                        and distance < self._max_distance
+                ):
                     if existing_nuggets == []:
                         statistics["attributes"][attribute.name]["guessed_matches"] += 1
                     nugget.document.attribute_mappings[attribute.name] = [nugget]
@@ -295,9 +292,11 @@ class TreeSearchMatchingPhase(BaseMatchingPhase):
 
         status_fn(f"Running {self.matching_phase_str}...", 1)
         tack: float = time.time()
-        logger.info(f"Executed matching phase '{self.matching_phase_str}' on document base with "
-                    f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes "
-                    f"in {tack - tick} seconds.")
+        logger.info(
+            f"Executed matching phase '{self.matching_phase_str}' on document base with "
+            f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes "
+            f"in {tack - tick} seconds."
+        )
 
     def to_config(self) -> Dict[str, Any]:
         return {
@@ -323,8 +322,9 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
     """
     Matching phase that displays a ranked list of nuggets to the user for feedback.
 
-    works with signals: CachedContextSentenceSignal, CachedDistanceSignal
+    works with signals: CachedContextSentenceSignal, CachedDistanceSignal, TreePredecessorSignal
     """
+
     matching_phase_str: str = "RankingBasedMatchingPhase"
 
     def __init__(
@@ -356,14 +356,19 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
             status_fn: StatusFunction,
             statistics: Statistics
     ) -> None:
-        logger.info(f"Execute matching phase '{self.matching_phase_str}' on document base with "
-                    f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes.")
+        logger.info(
+            f"Execute matching phase '{self.matching_phase_str}' on document base with "
+            f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes."
+        )
         tick: float = time.time()
         status_fn(f"Running {self.matching_phase_str}...", -1)
 
         statistics["matching_phase_str"] = self.matching_phase_str
         statistics["num_documents"] = len(document_base.documents)
         statistics["num_nuggets"] = len(document_base.nuggets)
+
+        # execute distance
+        self._distance(document_base, status_fn, statistics["distance"])
 
         # cache the context sentences
         logger.info("Cache the context sentences.")
@@ -403,15 +408,19 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
 
         for attribute in document_base.attributes:
             logger.info(f"Matching attribute '{attribute.name}'.")
+            self._distance.next_attribute()
             remaining_documents: List[ASETDocument] = []
 
             # compute initial distances as distances to label
             logger.info("Compute initial distances and initialize documents.")
             tik: float = time.time()
 
-            distances = self._distance.compute_distances([attribute], document_base.nuggets, statistics["distance"])[0]
+            distances: np.ndarray = self._distance.compute_distances(
+                [attribute], document_base.nuggets, statistics["distance"]
+            )[0]
             for nugget, distance in zip(document_base.nuggets, distances):
                 nugget[CachedDistanceSignal] = CachedDistanceSignal(distance)
+                nugget[TreePredecessorSignal] = TreePredecessorSignal(None)
 
             for document in document_base.documents:
                 index: int = -1
@@ -425,7 +434,7 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
                     remaining_documents.append(document)
                 else:  # document has no nuggets
                     document.attribute_mappings[attribute.name] = []
-                    statistics["num_document_with_no_nuggets"] += 1
+                    statistics[attribute.name]["num_document_with_no_nuggets"] += 1
 
             tak: float = time.time()
             logger.info(f"Computed initial distances and initialized documents in {tak - tik} seconds.")
@@ -435,7 +444,7 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
             tik: float = time.time()
             num_feedback: int = 0
             continue_matching: bool = True
-            initial_distances = True
+            initial_distances: bool = True
             while continue_matching and num_feedback < self._max_num_feedback and remaining_documents != []:
                 # sort remaining documents by distance
                 remaining_documents = list(sorted(
@@ -449,34 +458,49 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
                 for doc in remaining_documents[:self._len_ranked_list]:
                     feedback_nuggets.append(doc.nuggets[doc[CurrentMatchIndexAnnotation]])
                 num_feedback += 1
-                feedback_result: Dict[str, Any] = feedback_fn({
-                    "nuggets": feedback_nuggets,
-                    "attribute": attribute
-                })
+                feedback_result: Dict[str, Any] = feedback_fn({"nuggets": feedback_nuggets, "attribute": attribute})
 
                 if feedback_result["message"] == "stop-interactive-matching":
-                    statistics["stopped_matching_by_hand"] = True
+                    statistics[attribute.name]["stopped_matching_by_hand"] = True
                     continue_matching = False
                 elif feedback_result["message"] == "no-match-in-document":
-                    statistics["num_no_match_in_document"] += 1
+                    statistics[attribute.name]["num_no_match_in_document"] += 1
                     feedback_result["nugget"].document.attribute_mappings[attribute.name] = []
                     remaining_documents.remove(feedback_result["nugget"].document)
+
+                    # give feedback
+                    for nugget in feedback_result["nugget"].document.nuggets:
+                        if nugget[TreePredecessorSignal] is not None:
+                            self._distance.feedback_no_match(
+                                nugget,
+                                nugget[TreePredecessorSignal],
+                                statistics["distance"],
+                            )
+
                 elif feedback_result["message"] == "is-match":
-                    confirmed_nugget: ASETNugget = feedback_result["nugget"]
-                    statistics["num_confirmed_match"] += 1
-                    confirmed_nugget.document.attribute_mappings[attribute.name] = [confirmed_nugget]
+                    statistics[attribute.name]["num_confirmed_match"] += 1
+                    feedback_result["nugget"].document.attribute_mappings[attribute.name] = [feedback_result["nugget"]]
                     remaining_documents.remove(feedback_result["nugget"].document)
+
+                    # give feedback
+                    if feedback_result["nugget"][TreePredecessorSignal] is not None:
+                        self._distance.feedback_match(
+                            feedback_result["nugget"],
+                            feedback_result["nugget"][TreePredecessorSignal],
+                            statistics["distance"],
+                        )
 
                     # update the distances for the other documents
                     for document in remaining_documents:
-                        new_distances: np.array = self._distance.compute_distances(
-                            [confirmed_nugget],
+                        new_distances: np.ndarray = self._distance.compute_distances(
+                            [feedback_result["nugget"]],
                             document.nuggets,
                             statistics["distance"]
                         )[0]
                         for nugget, new_distance in zip(document.nuggets, new_distances):
                             if initial_distances or new_distance < nugget[CachedDistanceSignal]:
                                 nugget[CachedDistanceSignal] = new_distance
+                                nugget[TreePredecessorSignal] = feedback_result["nugget"]
                         initial_distances = False
                         for ix, nugget in enumerate(document.nuggets):
                             current_guess: ASETNugget = document.nuggets[document[CurrentMatchIndexAnnotation]]
@@ -492,10 +516,10 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
             for document in remaining_documents:
                 current_guess: ASETNugget = document.nuggets[document[CurrentMatchIndexAnnotation]]
                 if current_guess[CachedDistanceSignal] < self._max_distance:
-                    statistics["num_guessed_match"] += 1
+                    statistics[attribute.name]["num_guessed_match"] += 1
                     document.attribute_mappings[attribute.name] = [current_guess]
                 else:
-                    statistics["num_blocked_by_max_distance"] += 1
+                    statistics[attribute.name]["num_blocked_by_max_distance"] += 1
                     document.attribute_mappings[attribute.name] = []
 
             tak: float = time.time()
@@ -503,9 +527,11 @@ class RankingBasedMatchingPhase(BaseMatchingPhase):
 
         status_fn(f"Running {self.matching_phase_str}...", 1)
         tack: float = time.time()
-        logger.info(f"Executed matching phase '{self.matching_phase_str}' on document base with "
-                    f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes "
-                    f"in {tack - tick} seconds.")
+        logger.info(
+            f"Executed matching phase '{self.matching_phase_str}' on document base with "
+            f"{len(document_base.documents)} documents and {len(document_base.attributes)} attributes "
+            f"in {tack - tick} seconds."
+        )
 
     def to_config(self) -> Dict[str, Any]:
         return {

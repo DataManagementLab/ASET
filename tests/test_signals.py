@@ -2,9 +2,9 @@ from typing import Any, Type
 
 import numpy as np
 
-from aset.data.signals import BaseSignal, DistanceCacheIdSignal, LabelSignal, \
-    UserProvidedExamplesSignal, RelativePositionSignal, LabelEmbeddingSignal, TextEmbeddingSignal, \
-    ContextSentenceEmbeddingSignal, BaseNumpyArraySignal
+from aset.data.signals import BaseNumpyArraySignal, BaseSignal, CachedContextSentenceSignal, \
+    ContextSentenceEmbeddingSignal, DistanceCacheIdSignal, LabelEmbeddingSignal, LabelSignal, POSTagsSignal, \
+    RelativePositionSignal, TextEmbeddingSignal, TreePredecessorSignal, UserProvidedExamplesSignal
 
 
 def _test_signal(signal_class: Type["BaseSignal"], value_1: Any, value_2: Any, rep_value: Any) -> None:
@@ -207,3 +207,15 @@ def test_context_sentence_embedding_signal() -> None:
         np.array([0.02, 0.1, 2.2]),
         np.array([0.1])
     )
+
+
+def test_tree_predecessor_signal() -> None:
+    _test_signal(TreePredecessorSignal, {"value": 1}, {"value": 2}, {"value": 3})
+
+
+def test_cached_context_sentence_signal() -> None:
+    _test_signal(CachedContextSentenceSignal, "Sentence A", "Sentence B", "Sentence C")
+
+
+def test_pos_tags_signal() -> None:
+    _test_signal(POSTagsSignal, ["A", "B"], ["B", "C"], ["D"])

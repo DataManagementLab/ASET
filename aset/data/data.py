@@ -1,7 +1,7 @@
 import functools
 import logging
 import time
-from typing import List, Dict, Any, Optional, Union, Type
+from typing import Any, Dict, List, Optional, Type, Union
 
 import bson
 
@@ -23,7 +23,8 @@ class ASETNugget:
     def __init__(
             self,
             document: "ASETDocument",
-            start_char: int, end_char: int,
+            start_char: int,
+            end_char: int,
             extractor_str: Optional[str],
             type_str: Optional[str],
             value: Optional[str]
@@ -59,10 +60,16 @@ class ASETNugget:
         return hash((self._document, self._start_char, self._end_char))
 
     def __eq__(self, other) -> bool:
-        return isinstance(other, ASETNugget) and self._document.name == other._document.name and \
-               self._start_char == other._start_char and self._end_char == other._end_char and \
-               self.extractor_str == other.extractor_str and self._type_str == other._type_str and \
-               self._value == other._value and self._signals == other._signals
+        return (
+                isinstance(other, ASETNugget)
+                and self._document.name == other._document.name
+                and self._start_char == other._start_char
+                and self._end_char == other._end_char
+                and self.extractor_str == other.extractor_str
+                and self._type_str == other._type_str
+                and self._value == other._value
+                and self._signals == other._signals
+        )
 
     @property
     def document(self) -> "ASETDocument":
@@ -82,7 +89,7 @@ class ASETNugget:
     @functools.cached_property
     def text(self) -> str:
         """Actual text of the span."""
-        return self._document.text[self._start_char:self._end_char]
+        return self._document.text[self._start_char: self._end_char]
 
     @property
     def extractor_str(self) -> Optional[str]:
@@ -105,7 +112,7 @@ class ASETNugget:
         return self._signals
 
     def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
-        if type(item) == str:
+        if isinstance(item, str):
             signal_str: str = item
         else:
             signal_str: str = item.signal_str
@@ -115,7 +122,7 @@ class ASETNugget:
         return self._signals[signal_str].value
 
     def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
-        if type(key) == str:
+        if isinstance(key, str):
             signal_str: str = key
         else:
             signal_str: str = key.signal_str
@@ -171,7 +178,7 @@ class ASETAttribute:
         return self._signals
 
     def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
-        if type(item) == str:
+        if isinstance(item, str):
             signal_str: str = item
         else:
             signal_str: str = item.signal_str
@@ -181,7 +188,7 @@ class ASETAttribute:
         return self._signals[signal_str].value
 
     def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
-        if type(key) == str:
+        if isinstance(key, str):
             signal_str: str = key
         else:
             signal_str: str = key.signal_str
@@ -229,9 +236,14 @@ class ASETDocument:
         return hash(self._name)
 
     def __eq__(self, other) -> bool:
-        return isinstance(other, ASETDocument) and self._name == other._name and self._text == other._text \
-               and self._nuggets == other._nuggets and self._attribute_mappings == other._attribute_mappings \
-               and self._annotations == other._annotations
+        return (
+                isinstance(other, ASETDocument)
+                and self._name == other._name
+                and self._text == other._text
+                and self._nuggets == other._nuggets
+                and self._attribute_mappings == other._attribute_mappings
+                and self._annotations == other._annotations
+        )
 
     @property
     def name(self) -> str:
@@ -259,7 +271,7 @@ class ASETDocument:
         return self._annotations
 
     def __getitem__(self, item: Union[str, Type[BaseAnnotation]]) -> Any:
-        if type(item) == str:
+        if isinstance(item, str):
             annotation_str: str = item
         else:
             annotation_str: str = item.annotation_str
@@ -269,7 +281,7 @@ class ASETDocument:
         return self._annotations[annotation_str].value
 
     def __setitem__(self, key: Union[str, Type[BaseAnnotation]], value: Union[BaseAnnotation, Any]):
-        if type(key) == str:
+        if isinstance(key, str):
             annotation_str: str = key
         else:
             annotation_str: str = key.annotation_str
@@ -312,8 +324,11 @@ class ASETDocumentBase:
         )
 
     def __eq__(self, other) -> bool:
-        return isinstance(other, ASETDocumentBase) and self._documents == other._documents \
-               and self._attributes == other._attributes
+        return (
+                isinstance(other, ASETDocumentBase)
+                and self._documents == other._documents
+                and self._attributes == other._attributes
+        )
 
     @property
     def documents(self) -> List[ASETDocument]:
@@ -334,9 +349,8 @@ class ASETDocumentBase:
         return nuggets
 
     def to_table_dict(
-            self,
-            kind: Optional[str] = None
-    ) -> Dict[str, List[Union[str, Optional[List[Union[ASETNugget, Optional[str]]]]]]]:
+            self, kind: Optional[str] = None
+    ) -> Dict[str, List[Union[None, str, List[ASETNugget], List[Union[str, None]]]]]:
         """
         Table representation of the information nuggets in the document base.
 
@@ -356,28 +370,35 @@ class ASETDocumentBase:
         :param kind: whether the nuggets *text*, *value*, or the nuggets themselves (*None*) should be stored.
         :return: table representation of the information nuggets in the document base
         """
-        result: Dict[str, List[Union[str, Optional[List[Union[ASETNugget, Optional[str]]]]]]] = {
-            "document-name": [document.name for document in self._documents]
-        }
+        result: Dict[
+            str, List[Union[None, str, List[ASETNugget], List[Union[str, None]]]]
+        ] = {"document-name": [document.name for document in self._documents]}
 
         for attribute in self._attributes:
             result[attribute.name] = []
             for document in self._documents:
                 if kind is None:
-                    nuggets: Optional[List[ASETNugget]] = None
                     if attribute.name in document.attribute_mappings.keys():
-                        nuggets: List[ASETNugget] = document.attribute_mappings[attribute.name]
+                        result[attribute.name].append(document.attribute_mappings[attribute.name])
+                    else:
+                        result[attribute.name].append(None)
                 elif kind == "text":
-                    nuggets: Optional[List[str]] = None
                     if attribute.name in document.attribute_mappings.keys():
-                        nuggets: List[str] = [n.text for n in document.attribute_mappings[attribute.name]]
+                        result[attribute.name].append([
+                            n.text for n in document.attribute_mappings[attribute.name]
+                        ])
+                    else:
+                        result[attribute.name].append(None)
                 elif kind == "value":
-                    nuggets: Optional[List[Optional[str]]] = None
                     if attribute.name in document.attribute_mappings.keys():
-                        nuggets: List[Optional[str]] = [n.value for n in document.attribute_mappings[attribute.name]]
+                        result[attribute.name].append([
+                            str(n.value) if n.value is not None else None for n in
+                            document.attribute_mappings[attribute.name]
+                        ])
+                    else:
+                        result[attribute.name].append(None)
                 else:
                     assert False, f"Unknown parameter kind '{kind}'!"
-                result[attribute.name].append(nuggets)
 
         return result
 
@@ -443,10 +464,7 @@ class ASETDocumentBase:
         tick: float = time.time()
 
         # serialize the document base
-        serializable_base: Dict[str, Any] = {
-            "documents": [],
-            "attributes": []
-        }
+        serializable_base: Dict[str, Any] = {"documents": [], "attributes": []}
 
         for attribute in self._attributes:
             # serialize the attribute
@@ -534,9 +552,7 @@ class ASETDocumentBase:
 
         for serialized_attribute in serialized_base["attributes"]:
             # deserialize the attribute
-            attribute: ASETAttribute = ASETAttribute(
-                name=serialized_attribute["name"]
-            )
+            attribute: ASETAttribute = ASETAttribute(name=serialized_attribute["name"])
 
             # deserialize the signals
             for signal_str, serialized_signal in serialized_attribute["signals"].items():
@@ -546,10 +562,7 @@ class ASETDocumentBase:
 
         for serialized_document in serialized_base["documents"]:
             # deserialize the document
-            document: ASETDocument = ASETDocument(
-                name=serialized_document["name"],
-                text=serialized_document["text"]
-            )
+            document: ASETDocument = ASETDocument(name=serialized_document["name"], text=serialized_document["text"])
 
             for serialized_nugget in serialized_document["nuggets"]:
                 # deserialize the nugget

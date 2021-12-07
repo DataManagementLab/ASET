@@ -28,6 +28,8 @@ the `raw-documents` folder.
 
 ## Set up the Project
 
+This project runs with Python 3.9.7.
+
 Check out the `requirements.txt` file to see which packages have to be installed.
 
 You can install them with `pip install -r requirements.txt`.
@@ -35,3 +37,5 @@ You can install them with `pip install -r requirements.txt`.
 You may have to install `torch` by hand if you want to use CUDA:
 
 https://pytorch.org/get-started/locally/
+
+Make sure to also install `pytest` to execute the tests.

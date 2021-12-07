@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from aset.config import ConfigurableElement
 from aset.data.data import ASETDocumentBase
@@ -21,10 +21,7 @@ class PreprocessingPhase(ConfigurableElement):
     """
 
     def __init__(
-            self,
-            extractors: List[BaseExtractor],
-            normalizers: List[BaseNormalizer],
-            embedders: List[BaseEmbedder]
+            self, extractors: List[BaseExtractor], normalizers: List[BaseNormalizer], embedders: List[BaseEmbedder]
     ) -> None:
         """
         Initialize the PreprocessingPhase.
@@ -51,8 +48,12 @@ class PreprocessingPhase(ConfigurableElement):
         )
 
     def __eq__(self, other) -> bool:
-        return isinstance(other, PreprocessingPhase) and self._extractors == other._extractors and \
-               self._normalizers == other._normalizers and self._embedders == other._embedders
+        return (
+                isinstance(other, PreprocessingPhase)
+                and self._extractors == other._extractors
+                and self._normalizers == other._normalizers
+                and self._embedders == other._embedders
+        )
 
     def __call__(
             self,
@@ -67,8 +68,10 @@ class PreprocessingPhase(ConfigurableElement):
         :param status_fn: callback function to communicate current status (message and progress)
         :param statistics: statistics object to collect statistics
         """
-        logger.info(f"Execute preprocessing phase on document base with {len(document_base.documents)} documents "
-                    f"and {len(document_base.attributes)} attributes.")
+        logger.info(
+            f"Execute preprocessing phase on document base with {len(document_base.documents)} documents "
+            f"and {len(document_base.attributes)} attributes."
+        )
         tick: float = time.time()
         status_fn("Running preprocessing phase...", -1)
 

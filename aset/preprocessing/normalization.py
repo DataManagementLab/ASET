@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Dict, Any, Type
+from typing import Any, Dict, Type
 
 from aset.config import ConfigurableElement
 from aset.data.data import ASETDocumentBase
@@ -25,6 +25,7 @@ class BaseNormalizer(ConfigurableElement, abc.ABC):
     They are configurable elements and should be applied in the preprocessing phase. A normalizer does not have to work
     with every nugget in the document base. Each normalizer comes with an identifier ('normalizer_str').
     """
+
     normalizer_str: str = "BaseNormalizer"
 
     def __str__(self) -> str:
@@ -36,12 +37,7 @@ class BaseNormalizer(ConfigurableElement, abc.ABC):
     def __hash__(self) -> int:
         return hash(self.normalizer_str)
 
-    def _use_status_fn(
-            self,
-            status_fn: StatusFunction,
-            document_base: ASETDocumentBase,
-            ix: int
-    ) -> None:
+    def _use_status_fn(self, status_fn: StatusFunction, document_base: ASETDocumentBase, ix: int) -> None:
         """
         Helper method that calls the status function at regular intervals.
 

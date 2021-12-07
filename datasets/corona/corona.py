@@ -29,13 +29,13 @@ import json
 import logging
 import os
 from glob import glob
-from typing import List, Dict
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-NAME = "corona"
+NAME: str = "corona"
 
-ATTRIBUTES = [
+ATTRIBUTES: List[str] = [
     "date",  # date of the report
     "new_cases",  # number of new cases
     "new_deaths",  # number of new deaths
@@ -46,24 +46,24 @@ ATTRIBUTES = [
 ]
 
 
-def load_dataset():
+def load_dataset() -> List[Dict[str, Any]]:
     """
     Load the corona dataset.
 
     This method requires the .json files in the "datasets/corona/documents/" folder.
     """
-    dataset: List[Dict] = []
-    path = os.path.join(os.path.dirname(__file__), "documents", "*.json")
+    dataset: List[Dict[str, Any]] = []
+    path: str = os.path.join(os.path.dirname(__file__), "documents", "*.json")
     for file_path in glob(path):
         with open(file_path, encoding="utf-8") as file:
             dataset.append(json.loads(file.read()))
     return dataset
 
 
-def write_document(document: {}):
+def write_document(document: Dict[str, Any]) -> Any:
     """
     Write the given document to the dataset.
     """
-    path = os.path.join(os.path.dirname(__file__), "documents", document["id"] + ".json")
+    path: str = os.path.join(os.path.dirname(__file__), "documents", document["id"] + ".json")
     with open(path, "w", encoding="utf-8") as file:
         file.write(json.dumps(document))

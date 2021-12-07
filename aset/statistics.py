@@ -1,12 +1,11 @@
 import json
 import logging
-from typing import Dict, Any, Union, Optional, List
+from typing import Any, Dict, List, Optional, Union
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Statistics:
-
     def __init__(self, do_collect: bool = True) -> None:
         super(Statistics, self).__init__()
         self._do_collect: bool = do_collect
@@ -25,8 +24,8 @@ class Statistics:
         return f"Statistics({self._do_collect})"
 
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, Statistics) and self._do_collect == other._do_collect \
-               and self._entries == other._entries
+        return isinstance(other, Statistics) and \
+               self._do_collect == other._do_collect and self._entries == other._entries
 
     def __getitem__(self, item: str) -> Union["Statistics", Any]:
         if self._do_collect:

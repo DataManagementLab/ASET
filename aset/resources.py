@@ -2,16 +2,17 @@ import abc
 import logging
 import os
 import time
-from typing import Optional, Dict, Any, Type, List, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 import numpy as np
 import spacy
+import spacy.cli.download
 import stanza
 import torch
 from sentence_transformers import SentenceTransformer
-from spacy import Language
+from spacy.language import Language
 from stanza import Pipeline
-from transformers import BertTokenizer, BertModel, BertTokenizerFast
+from transformers import BertModel, BertTokenizer, BertTokenizerFast
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class BaseResource(abc.ABC):
     identifier ('resource_str'). Resources are managed by the resource manager, which can load the same resource once
     and provide it to multiple users and also manages to close all resources when the program ends.
     """
+
     resource_str: str = "BaseResource"
 
     @classmethod
@@ -60,6 +62,7 @@ class StanzaNERPipeline(BaseResource):
 
     See https://stanfordnlp.github.io/stanza/
     """
+
     resource_str: str = "StanzaNERPipeline"
 
     def __init__(self) -> None:
@@ -67,10 +70,7 @@ class StanzaNERPipeline(BaseResource):
         super(StanzaNERPipeline, self).__init__()
         path: str = os.path.join(os.path.dirname(__file__), "..", "models", "stanza")
         self._stanza_ner_pipeline: Pipeline = Pipeline(
-            lang="en",
-            processors="tokenize,mwt,pos,ner",
-            model_dir=path,
-            verbose=False
+            lang="en", processors="tokenize,mwt,pos,ner", model_dir=path, verbose=False
         )
 
     @classmethod
@@ -100,13 +100,14 @@ class BaseFastTextEmbedding(BaseResource, abc.ABC):
 
     See https://fasttext.cc/
     """
+
     resource_str: str = "BaseFastTextEmbedding"
     _num_vectors: Optional[int] = None
 
     def __init__(self) -> None:
         """Initialize the FastText embedding."""
         super(BaseFastTextEmbedding, self).__init__()
-        self._fast_text_embedding: Dict[str, np.array] = {}
+        self._fast_text_embedding: Dict[str, np.ndarray] = {}
         path: str = os.path.join(os.path.dirname(__file__), "..", "models", "fasttext", "wiki-news-300d-1M-subword.vec")
         with open(path, "r", encoding="utf-8", newline="\n", errors="ignore") as file:
             _ = file.readline()  # skip number of words, dimension
@@ -134,13 +135,14 @@ class BaseFastTextEmbedding(BaseResource, abc.ABC):
         del self._fast_text_embedding
 
     @property
-    def resource(self) -> Dict[str, np.array]:
+    def resource(self) -> Dict[str, np.ndarray]:
         return self._fast_text_embedding
 
 
 @register_resource
 class FastTextEmbedding100000(BaseFastTextEmbedding):
     """FastText embedding that includes only the 100000 first vectors."""
+
     resource_str: str = "FastTextEmbedding100000"
     _num_vectors: Optional[int] = 100000
 
@@ -148,6 +150,7 @@ class FastTextEmbedding100000(BaseFastTextEmbedding):
 @register_resource
 class FastTextEmbedding(BaseFastTextEmbedding):
     """FastText embedding that includes all vectors."""
+
     resource_str: str = "FastTextEmbedding"
     _num_vectors: Optional[int] = None
 
@@ -158,6 +161,7 @@ class BaseSpacyResource(BaseResource, abc.ABC):
 
     See https://spacy.io/
     """
+
     resource_str: str = "BaseSpacyResource"
     _spacy_package_str: str = "BaseSpacyPackageStr"
 
@@ -188,6 +192,7 @@ class BaseSpacyResource(BaseResource, abc.ABC):
 @register_resource
 class SpacyEnCoreWebTrf(BaseSpacyResource):
     """Spacy 'en_core_web_trf' model."""
+
     resource_str: str = "SpacyEnCoreWebTrf"
     _spacy_package_str: str = "en_core_web_trf"
 
@@ -195,6 +200,7 @@ class SpacyEnCoreWebTrf(BaseSpacyResource):
 @register_resource
 class SpacyEnCoreWebLg(BaseSpacyResource):
     """Spacy 'en_core_web_lg' model."""
+
     resource_str: str = "SpacyEnCoreWebLg"
     _spacy_package_str: str = "en_core_web_lg"
 
@@ -202,6 +208,7 @@ class SpacyEnCoreWebLg(BaseSpacyResource):
 @register_resource
 class SpacyEnCoreWebMd(BaseSpacyResource):
     """Spacy 'en_core_web_md' model."""
+
     resource_str: str = "SpacyEnCoreWebMd"
     _spacy_package_str: str = "en_core_web_md"
 
@@ -209,6 +216,7 @@ class SpacyEnCoreWebMd(BaseSpacyResource):
 @register_resource
 class SpacyEnCoreWebSm(BaseSpacyResource):
     """Spacy 'en_core_web_sm' model."""
+
     resource_str: str = "SpacyEnCoreWebSm"
     _spacy_package_str: str = "en_core_web_sm"
 
@@ -220,6 +228,7 @@ class SpacyEnCoreSciMd(BaseResource):
 
     See https://allenai.github.io/scispacy/
     """
+
     resource_str: str = "SpacyEnCoreSciMd"
 
     def __init__(self) -> None:
@@ -256,6 +265,7 @@ class SpacyEnNerCraftMd(BaseResource):
 
     See https://allenai.github.io/scispacy/
     """
+
     resource_str: str = "SpacyEnNerCraftMd"
 
     def __init__(self) -> None:
@@ -291,6 +301,7 @@ class BaseBERTResource(BaseResource):
 
     See https://huggingface.co/transformers/model_doc/bert.html
     """
+
     resource_str: str = "BaseBERTResource"
     _bert_model_str: str = "BaseBertModelStr"
 
@@ -299,16 +310,10 @@ class BaseBERTResource(BaseResource):
         super(BaseBERTResource, self).__init__()
         path: str = os.path.join(os.path.dirname(__file__), "..", "models", "transformers")
 
-        self._tokenizer: BertTokenizer = BertTokenizerFast.from_pretrained(
-            self._bert_model_str,
-            cache_dir=path
-        )
+        self._tokenizer: BertTokenizer = BertTokenizerFast.from_pretrained(self._bert_model_str, cache_dir=path)
         self._tokenizer.add_tokens(["[START_MENTION]", "[END_MENTION]", "[MASK]"])
 
-        self._model: BertModel = BertModel.from_pretrained(
-            self._bert_model_str,
-            cache_dir=path
-        )
+        self._model: BertModel = BertModel.from_pretrained(self._bert_model_str, cache_dir=path)
 
         if torch.cuda.is_available():
             self._device: Optional[Any] = torch.device("cuda")
@@ -340,6 +345,7 @@ class BaseBERTResource(BaseResource):
 @register_resource
 class BertLargeCasedResource(BaseBERTResource):
     """BERT 'bert-large-cased' model."""
+
     resource_str: str = "BertLargeCasedResource"
     _bert_model_str: str = "bert-large-cased"
 
@@ -350,6 +356,7 @@ class BaseSBERTResource(BaseResource, abc.ABC):
 
     See https://sbert.net/
     """
+
     resource_str: str = "BaseSBERTResource"
     _sbert_model_str: str = "BaseSBERTModelStr"
 
@@ -358,10 +365,7 @@ class BaseSBERTResource(BaseResource, abc.ABC):
         super(BaseSBERTResource, self).__init__()
 
         path: str = os.path.join(os.path.dirname(__file__), "..", "models", "sentence-transformers")
-        self._sbert_model: SentenceTransformer = SentenceTransformer(
-            self._sbert_model_str,
-            cache_folder=path
-        )
+        self._sbert_model: SentenceTransformer = SentenceTransformer(self._sbert_model_str, cache_folder=path)
 
     @classmethod
     def load(cls) -> "BaseSBERTResource":
@@ -381,6 +385,7 @@ class BaseSBERTResource(BaseResource, abc.ABC):
 @register_resource
 class SBERTBertLargeNliMeanTokensResource(BaseSBERTResource):
     """SBERT 'bert-large-nli-mean-tokens' model."""
+
     resource_str: str = "SBERTBertLargeNliMeanTokensResource"
     _sbert_model_str: str = "bert-large-nli-mean-tokens"
 
@@ -438,9 +443,7 @@ class ResourceManager:
 
     def __str__(self) -> str:
         resources_str: str = "\n".join(f"- {resource_str}" for resource_str in self._resources.keys())
-        return "Currently loaded resources:\n{}".format(
-            resources_str if resources_str != "" else " -"
-        )
+        return "Currently loaded resources:\n{}".format(resources_str if resources_str != "" else " -")
 
     def load(self, resource: Union[str, Type[BaseResource]]) -> None:
         """
@@ -448,7 +451,7 @@ class ResourceManager:
 
         :param resource: resource class or identifier of the resource to load
         """
-        if type(resource) == str:
+        if isinstance(resource, str):
             resource_str: str = resource
         else:
             resource_str: str = resource.resource_str
@@ -471,7 +474,7 @@ class ResourceManager:
 
         :param resource: resource class or identifier of the resource to load
         """
-        if type(resource) == str:
+        if isinstance(resource, str):
             resource_str: str = resource
         else:
             resource_str: str = resource.resource_str
@@ -497,7 +500,7 @@ class ResourceManager:
         :param resource: resource class or identifier of the resource to load
         :return: the resource
         """
-        if type(resource) == str:
+        if isinstance(resource, str):
             resource_str: str = resource
         else:
             resource_str: str = resource.resource_str

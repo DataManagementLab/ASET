@@ -1,7 +1,7 @@
 import abc
 import logging
 import time
-from typing import Dict, Any, List, Type
+from typing import Any, Dict, List, Type
 
 from spacy.tokens import Doc
 
@@ -32,6 +32,7 @@ class BaseExtractor(ConfigurableElement, abc.ABC):
     They are configurable elements and should be applied in the preprocessing phase. Each extractor comes with an
     identifier ('extractor_str').
     """
+
     extractor_str: str = "BaseExtractor"
 
     def __str__(self) -> str:
@@ -63,12 +64,7 @@ class BaseExtractor(ConfigurableElement, abc.ABC):
     def from_config(cls, config: Dict[str, Any]) -> "BaseExtractor":
         return EXTRACTORS[config["extractor_str"]].from_config(config)
 
-    def _use_status_fn(
-            self,
-            status_fn: StatusFunction,
-            document_base: ASETDocumentBase,
-            ix: int
-    ) -> None:
+    def _use_status_fn(self, status_fn: StatusFunction, document_base: ASETDocumentBase, ix: int) -> None:
         """
         Helper method that calls the status function at regular intervals.
 
@@ -93,6 +89,7 @@ class SpacyNERExtractor(BaseExtractor):
     produced ASETDocument annotations: SentenceStartCharsAnnotation
     produced ASETNugget signals: LabelSignal, POSTagsSignal
     """
+
     extractor_str: str = "SpacyNERExtractor"
 
     def __init__(self, spacy_resource_str: str) -> None:
@@ -176,6 +173,7 @@ class StanzaNERExtractor(BaseExtractor):
     produced ASETDocument annotations: SentenceStartCharsAnnotation
     produced ASETNugget signals: LabelSignal, POSTagsSignal
     """
+
     extractor_str: str = "StanzaNERExtractor"
 
     def __init__(self) -> None:

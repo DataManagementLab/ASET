@@ -1,17 +1,16 @@
 import logging
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QTextCursor, QIcon
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QTextEdit, QPushButton, QScrollArea, QFrame
+from PyQt6.QtGui import QIcon, QTextCursor
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QTextEdit, QVBoxLayout, QWidget
 
 from aset.data.signals import CachedContextSentenceSignal, CachedDistanceSignal
-from aset_ui.style import HEADER_FONT, CODE_FONT, LABEL_FONT, CODE_FONT_BOLD, BUTTON_FONT
+from aset_ui.style import BUTTON_FONT, CODE_FONT, CODE_FONT_BOLD, HEADER_FONT, LABEL_FONT
 
 logger = logging.getLogger(__name__)
 
 
 class InteractiveMatchingWidget(QWidget):
-
     def __init__(self, main_window):
         super(InteractiveMatchingWidget, self).__init__(main_window)
         self._main_window = main_window
@@ -57,15 +56,8 @@ class InteractiveMatchingWidget(QWidget):
         self._layout.removeWidget(self._nugget_list_widget)
         self._layout.addWidget(self._document_widget)
 
-    def enable_input(self):
-        pass
-
-    def disable_input(self):
-        pass
-
 
 class NuggetListWidget(QWidget):
-
     def __init__(self, interactive_matching_widget):
         super(NuggetListWidget, self).__init__(interactive_matching_widget)
         self._interactive_matching_widget = interactive_matching_widget
@@ -134,13 +126,10 @@ class NuggetListWidget(QWidget):
         self._interactive_matching_widget.get_document_feedback(nugget)
 
     def _stop_button_clicked(self, _):
-        self._interactive_matching_widget.give_feedback({
-            "message": "stop-interactive-matching"
-        })
+        self._interactive_matching_widget.give_feedback({"message": "stop-interactive-matching"})
 
 
 class NuggetListItemWidget(QFrame):
-
     def __init__(self, nugget_list_widget):
         super(NuggetListItemWidget, self).__init__(nugget_list_widget)
         self._nugget_list_widget = nugget_list_widget
@@ -197,9 +186,11 @@ class NuggetListItemWidget(QFrame):
         end_char = self._nugget[CachedContextSentenceSignal]["end_char"]
 
         self._text_edit.setText("")
-        formatted_text = f"{'&#160;' * (max_start_chars - start_char)}{sentence[:start_char]}" \
-                         f"<span style='background-color: #FFFF00'><b>{sentence[start_char:end_char]}</b></span>" \
-                         f"{sentence[end_char:]}{'&#160;' * 50}"
+        formatted_text = (
+            f"{'&#160;' * (max_start_chars - start_char)}{sentence[:start_char]}"
+            f"<span style='background-color: #FFFF00'><b>{sentence[start_char:end_char]}</b></span>"
+            f"{sentence[end_char:]}{'&#160;' * 50}"
+        )
         self._text_edit.textCursor().insertHtml(formatted_text)
 
         scroll_cursor = QTextCursor(self._text_edit.document())
@@ -210,17 +201,13 @@ class NuggetListItemWidget(QFrame):
         self._info_label.setText(f"{str(round(nugget[CachedDistanceSignal], 2)).ljust(4)}")
 
     def _match_button_clicked(self, _):
-        self._nugget_list_widget.give_feedback({
-            "message": "is-match",
-            "nugget": self._nugget
-        })
+        self._nugget_list_widget.give_feedback({"message": "is-match", "nugget": self._nugget})
 
     def _fix_button_clicked(self, _):
         self._nugget_list_widget.get_document_feedback(self._nugget)
 
 
 class DocumentWidget(QWidget):
-
     def __init__(self, interactive_matching_widget):
         super(DocumentWidget, self).__init__(interactive_matching_widget)
         self._interactive_matching_widget = interactive_matching_widget
@@ -283,10 +270,7 @@ class DocumentWidget(QWidget):
             self._highlight_current_nugget()
 
     def _match_button_clicked(self, _):
-        self._interactive_matching_widget.give_feedback({
-            "message": "is-match",
-            "nugget": self._current_nugget
-        })
+        self._interactive_matching_widget.give_feedback({"message": "is-match", "nugget": self._current_nugget})
 
     def _no_match_button_clicked(self, _):
         self._interactive_matching_widget.give_feedback({
@@ -297,9 +281,12 @@ class DocumentWidget(QWidget):
     def _highlight_current_nugget(self):
         mapped_start_char = self._idx_mapper[self._current_nugget.start_char]
         mapped_end_char = self._idx_mapper[self._current_nugget.end_char]
-        formatted_text = f"{self._base_formatted_text[:mapped_start_char]}" \
-                         f"<span style='background-color: #FFFF00'><b>{self._base_formatted_text[mapped_start_char:mapped_end_char]}</span></b>" \
-                         f"{self._base_formatted_text[mapped_end_char:]}"
+        formatted_text = (
+            f"{self._base_formatted_text[:mapped_start_char]}"
+            f"<span style='background-color: #FFFF00'><b>"
+            f"{self._base_formatted_text[mapped_start_char:mapped_end_char]}</span></b>"
+            f"{self._base_formatted_text[mapped_end_char:]}"
+        )
         self._text_edit.setText("")
         self._text_edit.textCursor().insertHtml(formatted_text)
 

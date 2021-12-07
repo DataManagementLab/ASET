@@ -2,12 +2,17 @@
 /.idea/
 __pycache__/
 
-/cache/
-!/cache/info.info
-/models/
+!/cache
+/cache/*
+!/cache/dummy.txt
 
-/experiments/results/
-!/experiments/results/info.info
+!/models
+/models/*
+!/models/dummy.txt
+
+!/experiments/results
+/experiments/results/*
+!/experiments/results/dummy.txt
 
 /datasets/
 !/datasets/aviation/aviation.py

@@ -1,16 +1,16 @@
 import abc
 import logging
 import time
-from typing import Optional, Dict, Any, List, Set, Type
+from typing import Any, Dict, List, Optional, Set, Type
 
 import numpy as np
 
 from aset import resources
 from aset.config import ConfigurableElement
 from aset.data.annotations import SentenceStartCharsAnnotation
-from aset.data.data import ASETDocumentBase, ASETNugget, ASETAttribute
-from aset.data.signals import LabelSignal, LabelEmbeddingSignal, TextEmbeddingSignal, ContextSentenceEmbeddingSignal, \
-    RelativePositionSignal, UserProvidedExamplesSignal
+from aset.data.data import ASETAttribute, ASETDocumentBase, ASETNugget
+from aset.data.signals import ContextSentenceEmbeddingSignal, LabelEmbeddingSignal, LabelSignal, \
+    RelativePositionSignal, TextEmbeddingSignal, UserProvidedExamplesSignal
 from aset.statistics import Statistics
 from aset.status import StatusFunction
 
@@ -33,6 +33,7 @@ class BaseEmbedder(ConfigurableElement, abc.ABC):
     identifier ('embedder_str'). The embedders are free in which signals they require as inputs and which signals they
     produce as outputs. Furthermore, they do not have to work on both ASETNuggets and ASETAttributes
     """
+
     embedder_str: str = "BaseEmbedder"
 
     def __str__(self) -> str:
@@ -44,13 +45,7 @@ class BaseEmbedder(ConfigurableElement, abc.ABC):
     def __hash__(self) -> int:
         return hash(self.embedder_str)
 
-    def _use_status_fn(
-            self,
-            status_fn: StatusFunction,
-            element: str,
-            total: int,
-            ix: int
-    ) -> None:
+    def _use_status_fn(self, status_fn: StatusFunction, element: str, total: int, ix: int) -> None:
         """
         Helper method that calls the status function at regular intervals.
 
@@ -140,6 +135,7 @@ class BaseEmbedder(ConfigurableElement, abc.ABC):
 
 class BaseSBERTEmbedder(BaseEmbedder, abc.ABC):
     """Base class for all embedders based on SBERT."""
+
     embedder_str: str = "BaseSBERTEmbedder"
 
     def __init__(self, sbert_resource_str: str) -> None:
@@ -179,6 +175,7 @@ class SBERTLabelEmbedder(BaseSBERTEmbedder):
     required signals: name
     produced signals: LabelEmbeddingSignal
     """
+
     embedder_str: str = "SBERTLabelEmbedder"
 
     def embed_nuggets(
@@ -188,7 +185,9 @@ class SBERTLabelEmbedder(BaseSBERTEmbedder):
             statistics: Statistics
     ) -> None:
         texts: List[str] = [nugget[LabelSignal] for nugget in nuggets]
-        embeddings: List[np.array] = resources.MANAGER[self._sbert_resource_str].encode(texts, show_progress_bar=False)
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+            texts, show_progress_bar=False
+        )
 
         for nugget, embedding in zip(nuggets, embeddings):
             nugget[LabelEmbeddingSignal] = LabelEmbeddingSignal(embedding)
@@ -200,7 +199,9 @@ class SBERTLabelEmbedder(BaseSBERTEmbedder):
             statistics: Statistics
     ) -> None:
         texts: List[str] = [attribute.name for attribute in attributes]
-        embeddings: List[np.array] = resources.MANAGER[self._sbert_resource_str].encode(texts, show_progress_bar=False)
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+            texts, show_progress_bar=False
+        )
 
         for attribute, embedding in zip(attributes, embeddings):
             attribute[LabelEmbeddingSignal] = LabelEmbeddingSignal(embedding)
@@ -215,6 +216,7 @@ class SBERTTextEmbedder(BaseSBERTEmbedder):
     required signals: text
     produced signals: TextEmbeddingSignal
     """
+
     embedder_str: str = "SBERTTextEmbedder"
 
     def embed_nuggets(
@@ -224,7 +226,9 @@ class SBERTTextEmbedder(BaseSBERTEmbedder):
             statistics: Statistics
     ) -> None:
         texts: List[str] = [nugget.text for nugget in nuggets]
-        embeddings: List[np.array] = resources.MANAGER[self._sbert_resource_str].encode(texts, show_progress_bar=False)
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+            texts, show_progress_bar=False
+        )
 
         for nugget, embedding in zip(nuggets, embeddings):
             nugget[TextEmbeddingSignal] = TextEmbeddingSignal(embedding)
@@ -239,6 +243,7 @@ class SBERTExamplesEmbedder(BaseSBERTEmbedder):
     required signals: UserProvidedExamplesSignal
     produced signals: TextEmbeddingSignal
     """
+
     embedder_str: str = "SBERTExamplesEmbedder"
 
     def embed_attributes(
@@ -251,10 +256,10 @@ class SBERTExamplesEmbedder(BaseSBERTEmbedder):
             self._use_status_fn(status_fn, "attributes", len(attributes), ix)
             texts: List[str] = attribute[UserProvidedExamplesSignal]
             if texts != []:
-                embeddings: List[np.array] = resources.MANAGER[self._sbert_resource_str].encode(
+                embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
                     texts, show_progress_bar=False
                 )
-                embedding: np.array = np.mean(embeddings, axis=0)
+                embedding: np.ndarray = np.mean(embeddings, axis=0)
                 attribute[TextEmbeddingSignal] = TextEmbeddingSignal(embedding)
             else:
                 statistics["num_no_examples"] += 1
@@ -269,6 +274,7 @@ class SBERTContextSentenceEmbedder(BaseSBERTEmbedder):
     required signals: start_char, end_char, and document.text
     produced signals: ContextSentenceEmbeddingSignal
     """
+
     embedder_str: str = "SBERTContextSentenceEmbedder"
 
     def embed_nuggets(
@@ -300,7 +306,9 @@ class SBERTContextSentenceEmbedder(BaseSBERTEmbedder):
             texts.append(nugget.document.text[context_start_char:context_end_char])
 
         # compute embeddings
-        embeddings: List[np.array] = resources.MANAGER[self._sbert_resource_str].encode(texts, show_progress_bar=False)
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+            texts, show_progress_bar=False
+        )
 
         for nugget, embedding in zip(nuggets, embeddings):
             nugget[ContextSentenceEmbeddingSignal] = ContextSentenceEmbeddingSignal(embedding)
@@ -318,6 +326,7 @@ class BERTContextSentenceEmbedder(BaseEmbedder):
     required signals: start_char, end_char, and document.text
     produced signals: ContextSentenceEmbeddingSignal
     """
+
     embedder_str: str = "BERTContextSentenceEmbedder"
 
     def __init__(self, bert_resource_str: str) -> None:
@@ -367,9 +376,7 @@ class BERTContextSentenceEmbedder(BaseEmbedder):
 
             # compute the sentence's token embeddings
             encoding = resources.MANAGER[self._bert_resource_str]["tokenizer"](
-                context_sentence,
-                return_tensors="pt",
-                padding=True
+                context_sentence, return_tensors="pt", padding=True
             )
 
             device = resources.MANAGER[self._bert_resource_str]["device"]
@@ -387,18 +394,18 @@ class BERTContextSentenceEmbedder(BaseEmbedder):
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask
             )
-            output = outputs[0].detach()
+            torch_output = outputs[0].detach()
             if device is not None:
-                output = output.cpu()
-            output: np.array = output[0].numpy()
+                torch_output = torch_output.cpu()
+            output: np.ndarray = torch_output[0].numpy()
 
             # determine which tokens make up the nugget
-            token_indices: Set[int] = set()
+            token_indices_set: Set[int] = set()
             for char_ix in range(start_in_context, end_in_context):
                 token_ix: Optional[int] = encoding.char_to_token(char_ix)
                 if token_ix is not None:
-                    token_indices.add(token_ix)
-            token_indices: List[int] = list(token_indices)
+                    token_indices_set.add(token_ix)
+            token_indices: List[int] = list(token_indices_set)
 
             if token_indices == []:
                 statistics["num_no_token_indices"] += 1
@@ -406,7 +413,7 @@ class BERTContextSentenceEmbedder(BaseEmbedder):
                 assert False, f"There are no token indices for nugget '{nugget.text}' in '{context_sentence}'!"
 
             # compute the embedding as the mean of the nugget's tokens' embeddings
-            embedding: np.array = np.mean(output[token_indices], axis=0)
+            embedding: np.ndarray = np.mean(output[token_indices], axis=0)
             nugget[ContextSentenceEmbeddingSignal] = ContextSentenceEmbeddingSignal(embedding)
 
     def to_config(self) -> Dict[str, Any]:
@@ -429,6 +436,7 @@ class RelativePositionEmbedder(BaseEmbedder):
     required signals: start_char and document.text
     produced signals: RelativePositionSignal
     """
+
     embedder_str: str = "RelativePositionEmbedder"
 
     def __init__(self) -> None:
@@ -474,6 +482,7 @@ class FastTextLabelEmbedder(BaseEmbedder):
     required signals: name
     produced signals: LabelEmbeddingSignal
     """
+
     embedder_str: str = "FastTextLabelEmbedder"
 
     def __init__(self, embedding_resource_str: str, do_lowercase: bool, splitters: List[str]) -> None:
@@ -493,11 +502,7 @@ class FastTextLabelEmbedder(BaseEmbedder):
         resources.MANAGER.load(self._embedding_resource_str)
         logger.debug(f"Initialized {self.embedder_str}.")
 
-    def _compute_embedding(
-            self,
-            label: str,
-            statistics: Statistics
-    ) -> LabelEmbeddingSignal:
+    def _compute_embedding(self, label: str, statistics: Statistics) -> LabelEmbeddingSignal:
         """
         Compute the embedding of the given label.
 
@@ -518,7 +523,7 @@ class FastTextLabelEmbedder(BaseEmbedder):
             tokens: List[str] = [token.lower() for token in tokens]
 
         # compute the embeddings
-        embeddings: List[np.array] = []
+        embeddings: List[np.ndarray] = []
         for token in tokens:
             if token in resources.MANAGER[self._embedding_resource_str].keys():
                 embeddings.append(resources.MANAGER[self._embedding_resource_str][token])

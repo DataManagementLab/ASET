@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import Any, List, Dict, Type
+from typing import Any, Dict, List, Type
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class BaseAnnotation(abc.ABC):
     specifies whether it should be serialized with the document ('do_serialize') and how it should be serialized and
     deserialized ('to_serializable' and 'from_serializable').
     """
+
     annotation_str: str = "BaseAnnotation"
     do_serialize: bool = False
 
@@ -80,6 +81,7 @@ class BaseAnnotation(abc.ABC):
 @register_annotation
 class SentenceStartCharsAnnotation(BaseAnnotation):
     """Sentence boundaries as a list of indices of the first characters in each sentence."""
+
     annotation_str: str = "SentenceStartCharsAnnotation"
     do_serialize: bool = True
 
@@ -102,6 +104,7 @@ class SentenceStartCharsAnnotation(BaseAnnotation):
 @register_annotation
 class CurrentMatchIndexAnnotation(BaseAnnotation):
     """Index of the nugget that is currently considered as the match."""
+
     annotation_str: str = "CurrentMatchIndexAnnotation"
     do_serialize: bool = False
 

@@ -1,4 +1,5 @@
 import csv
+import glob
 import json
 import logging
 from json import JSONDecodeError
@@ -6,11 +7,11 @@ from json import JSONDecodeError
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from bson import InvalidBSON
 
-from aset.data.data import ASETDocumentBase
+from aset.data.data import ASETAttribute, ASETDocument, ASETDocumentBase
 from aset.matching.distance import SignalsMeanDistance
 from aset.matching.phase import BaseMatchingPhase, RankingBasedMatchingPhase
-from aset.preprocessing.embedding import FastTextLabelEmbedder, SBERTTextEmbedder, BERTContextSentenceEmbedder, \
-    RelativePositionEmbedder
+from aset.preprocessing.embedding import BERTContextSentenceEmbedder, FastTextLabelEmbedder, RelativePositionEmbedder, \
+    SBERTTextEmbedder
 from aset.preprocessing.extraction import StanzaNERExtractor
 from aset.preprocessing.phase import PreprocessingPhase
 from aset.statistics import Statistics
@@ -40,9 +41,51 @@ class ASETAPI(QObject):
     statistics_to_ui = pyqtSignal(Statistics)  # statistics
     feedback_request_to_ui = pyqtSignal(dict)
 
-    #######################################
+    ##############################
     # slots (aset ui --> aset api)
-    #######################################
+    ##############################
+    @pyqtSlot(str, list)
+    def create_document_base(self, path, attribute_names):
+        logger.debug("Called slot 'create_document_base'.")
+        self.status.emit("Creating document base...", -1)
+        try:
+            if path == "":
+                logger.error("The path cannot be empty!")
+                self.error.emit("The path cannot be empty!")
+                return
+
+            file_paths = glob.glob(path)
+            documents = []
+            for file_path in file_paths:
+                with open(file_path, encoding="utf-8") as file:
+                    documents.append(ASETDocument(file_path, file.read()))
+
+            if len(set(attribute_names)) != len(attribute_names):
+                logger.error("Attribute names must be unique!")
+                self.error.emit("Attribute names must be unique!")
+                return
+
+            for attribute_name in attribute_names:
+                if attribute_name == "":
+                    logger.error("Attribute names cannot be empty!")
+                    self.error.emit("Attribute names cannot be empty!")
+                    return
+
+            attributes = []
+            for attribute_name in attribute_names:
+                attributes.append(ASETAttribute(attribute_name))
+
+            document_base = ASETDocumentBase(documents, attributes)
+
+            self.document_base_to_ui.emit(document_base)
+            self.finished.emit("Finished!")
+        except FileNotFoundError:
+            logger.error("Directory does not exist!")
+            self.error.emit("Directory does not exist!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
     @pyqtSlot(str)
     def load_document_base_from_bson(self, path):
         logger.debug("Called slot 'load_document_base_from_bson'.")
@@ -84,12 +127,13 @@ class ASETAPI(QObject):
         try:
             table_dict = document_base.to_table_dict("text")  # TODO: currently stores the nuggets' texts
             headers = list(table_dict.keys())
-            with open(path, 'w', encoding="utf-8") as file:
-                writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
+            rows = []
+            for ix in range(len(table_dict[headers[0]])):
+                rows.append([table_dict[header][ix] for header in headers])
+            with open(path, "w", encoding="utf-8", newline="") as file:
+                writer = csv.writer(file, delimiter=",", quotechar='"', quoting=csv.QUOTE_ALL)
                 writer.writerow(headers)
-                for ix in range(len(table_dict[headers[0]])):
-                    row = [table_dict[header][ix] for header in headers]
-                    writer.writerow(row)
+                writer.writerows(rows)
             self.finished.emit("Finished!")
         except FileNotFoundError:
             logger.error("Directory does not exist!")

@@ -5,11 +5,11 @@ import random
 
 import numpy as np
 
-from aset.data.data import ASETDocumentBase, ASETDocument, ASETAttribute
+from aset.data.data import ASETAttribute, ASETDocument, ASETDocumentBase
 from aset.matching.distance import SignalsMeanDistance
 from aset.matching.phase import BaseMatchingPhase, RankingBasedMatchingPhase
-from aset.preprocessing.embedding import SBERTTextEmbedder, RelativePositionEmbedder, FastTextLabelEmbedder, \
-    BERTContextSentenceEmbedder
+from aset.preprocessing.embedding import BERTContextSentenceEmbedder, FastTextLabelEmbedder, \
+    RelativePositionEmbedder, SBERTTextEmbedder
 from aset.preprocessing.extraction import StanzaNERExtractor
 from aset.preprocessing.phase import PreprocessingPhase
 from aset.resources import ResourceManager
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         ################################################################################################################
         # preprocessing phase
         ################################################################################################################
-        if not os.path.isfile("../cache/unmatched-document-base.bson"):
+        if not os.path.isfile(os.path.join(os.path.dirname(__file__), "..", "cache", "unmatched-document-base.bson")):
             preprocessing_phase = PreprocessingPhase(
                 extractors=[
                     StanzaNERExtractor()
@@ -88,19 +88,27 @@ if __name__ == "__main__":
                 ]
             )
 
-            with open("../cache/preprocessing-phase-config.json", "w") as file:
+            with open(
+                    os.path.join(os.path.dirname(__file__), "..", "cache", "preprocessing-phase-config.json"), "w"
+            ) as file:
                 json.dump(preprocessing_phase.to_config(), file)
 
             statistics["preprocessing"]["config"] = preprocessing_phase.to_config()
 
             preprocessing_phase(document_base, status_fn, statistics["preprocessing"]["statistics"])
 
-            with open("../cache/unmatched-document-base.bson", "wb") as file:
+            with open(
+                    os.path.join(os.path.dirname(__file__), "..", "cache", "unmatched-document-base.bson"), "wb"
+            ) as file:
                 file.write(document_base.to_bson())
         else:
-            with open("../cache/preprocessing-phase-config.json", "r") as file:
+            with open(
+                    os.path.join(os.path.dirname(__file__), "..", "cache", "preprocessing-phase-config.json"), "r"
+            ) as file:
                 statistics["preprocessing"]["config"] = json.load(file)
-            with open("../cache/unmatched-document-base.bson", "rb") as file:
+            with open(
+                    os.path.join(os.path.dirname(__file__), "..", "cache", "unmatched-document-base.bson"), "rb"
+            ) as file:
                 document_base = ASETDocumentBase.from_bson(file.read())
 
         for attribute in dataset.ATTRIBUTES:
@@ -150,7 +158,7 @@ if __name__ == "__main__":
             max_distance=0.6
         )
 
-        with open("../cache/matching-phase-config.json", "w") as file:
+        with open(os.path.join(os.path.dirname(__file__), "..", "cache", "matching-phase-config.json"), "w") as file:
             json.dump(matching_phase.to_config(), file)
         statistics["matching"]["config"] = matching_phase.to_config()
 
@@ -162,7 +170,9 @@ if __name__ == "__main__":
             print("\n\n\nExecuting run {}.".format(run + 1))
 
             # load the document base
-            with open("../cache/unmatched-document-base.bson", "rb") as file:
+            with open(
+                    os.path.join(os.path.dirname(__file__), "..", "cache", "unmatched-document-base.bson"), "rb"
+            ) as file:
                 document_base = ASETDocumentBase.from_bson(file.read())
 
             # set the random seed
@@ -190,7 +200,9 @@ if __name__ == "__main__":
                 statistics["matching"]["runs"][str(run)]["example_mentions"] = example_mentions
 
             # engage the matching phase
-            with open("../cache/matching-phase-config.json", "r") as file:
+            with open(
+                    os.path.join(os.path.dirname(__file__), "..", "cache", "matching-phase-config.json"), "r"
+            ) as file:
                 matching_phase = BaseMatchingPhase.from_config(json.load(file))
 
 
@@ -235,7 +247,7 @@ if __name__ == "__main__":
             #         assert False, f"Unknown message '{feedback_request['message']}'!"
 
             # for RankingBasedMatchingPhase
-            def automatic_feedback_fn(feedback_request):
+            def automatic_ranking_feedback_fn_first_incorrect_nugget(feedback_request):
                 nuggets = feedback_request["nuggets"]
                 attr = feedback_request["attribute"]
 
@@ -280,12 +292,52 @@ if __name__ == "__main__":
                     }
 
 
-            matching_phase(
-                document_base,
-                automatic_feedback_fn,
-                status_fn,
-                statistics["matching"]["runs"][str(run)]["statistics"]
-            )
+            # def automatic_ranking_feedback_fn_random_nugget(feedback_request):
+            #     nuggets = feedback_request["nuggets"]
+            #     attr = feedback_request["attribute"]
+            #
+            #     attr_name = column_name2attribute_name[attr.name]
+            #
+            #     # give feedback on a random nugget
+            #     nugget = random.choices(
+            #         nuggets,
+            #         weights=[2 ** (len(nuggets) - n) for n in range(len(nuggets))],
+            #         k=1,
+            #     )[0]
+            #     doc = None
+            #     for d in documents:
+            #         if d["id"] == nugget.document.name:
+            #             doc = d
+            #
+            #     for mention in doc["mentions"][attr_name]:
+            #         if consider_overlap_as_match(
+            #             nugget.start_char,
+            #             nugget.end_char,
+            #             mention["start_char"],
+            #             mention["end_char"],
+            #         ):
+            #             print(f"{attr_name}, IS MATCH")
+            #             return {"message": "is-match", "nugget": nugget}
+            #
+            #     # nugget is an incorrect guess
+            #     for n in nugget.document.nuggets:
+            #         for mention in doc["mentions"][attr_name]:
+            #             if consider_overlap_as_match(
+            #                 n.start_char,
+            #                 n.end_char,
+            #                 mention["start_char"],
+            #                 mention["end_char"],
+            #             ):
+            #                 # there is a matching nugget
+            #                 print(f"{attr_name}, RETURN OTHER MATCHING NUGGET")
+            #                 return {"message": "is-match", "nugget": n}
+            #
+            #     # there is no matching nugget
+            #     print(f"{attr_name}, NO MATCH IN DOCUMENT")
+            #     return {"message": "no-match-in-document", "nugget": nugget}
+
+            matching_phase(document_base, automatic_ranking_feedback_fn_first_incorrect_nugget, status_fn,
+                           statistics["matching"]["runs"][str(run)]["statistics"])
 
             # evaluate the matching process
             for attribute, attribute_name in zip(dataset.ATTRIBUTES, attribute_names):
@@ -305,12 +357,8 @@ if __name__ == "__main__":
                         else:
                             found_nugget = found_nuggets[0]  # TODO: evaluate if there is more than one found nugget
                             for mention in document["mentions"][attribute]:
-                                if consider_overlap_as_match(
-                                        mention["start_char"],
-                                        mention["end_char"],
-                                        found_nugget.start_char,
-                                        found_nugget.end_char
-                                ):
+                                if consider_overlap_as_match(mention["start_char"], mention["end_char"],
+                                                             found_nugget.start_char, found_nugget.end_char):
                                     results["num_should_be_filled_is_correct"] += 1
                                     break
                             else:
@@ -323,26 +371,21 @@ if __name__ == "__main__":
                             results["num_should_be_empty_is_full"] += 1
 
                 # compute the evaluation metrics
-                results["recall"] = \
-                    results["num_should_be_filled_is_correct"] / (
-                            results["num_should_be_filled_is_correct"]
-                            + results["num_should_be_filled_is_incorrect"]
-                            + results["num_should_be_filled_is_empty"]
-                    )
+                results["recall"] = results["num_should_be_filled_is_correct"] / (
+                        results["num_should_be_filled_is_correct"] + results["num_should_be_filled_is_incorrect"] +
+                        results["num_should_be_filled_is_empty"])
 
                 if (results["num_should_be_filled_is_correct"] + results["num_should_be_filled_is_incorrect"]) == 0:
                     results["precision"] = 1
                 else:
                     results["precision"] = results["num_should_be_filled_is_correct"] / (
-                            results["num_should_be_filled_is_correct"]
-                            + results["num_should_be_filled_is_incorrect"]
-                    )
+                            results["num_should_be_filled_is_correct"] + results["num_should_be_filled_is_incorrect"])
 
                 if results["precision"] + results["recall"] == 0:
                     results["f1_score"] = 0
                 else:
-                    results["f1_score"] = 2 * results["precision"] * results["recall"] \
-                                          / (results["precision"] + results["recall"])
+                    results["f1_score"] = (
+                            2 * results["precision"] * results["recall"] / (results["precision"] + results["recall"]))
 
         # compute the results as the median
         for attribute in dataset.ATTRIBUTES:
@@ -353,7 +396,9 @@ if __name__ == "__main__":
         ################################################################################################################
         # store the results
         ################################################################################################################
-        if not os.path.isdir(f"results/{dataset.NAME}"):
-            os.makedirs(f"results/{dataset.NAME}", exist_ok=True)
-        with open(f"results/{dataset.NAME}/" + "aset-stanza-ranking" + ".json", "w") as file:
+        if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "results", f"{dataset.NAME}")):
+            os.makedirs(os.path.join(os.path.dirname(__file__), "..", "results", f"{dataset.NAME}"), exist_ok=True, )
+        with open(
+                os.path.join(os.path.dirname(__file__), "results", f"{dataset.NAME}", "aset-stanza-ranking.json"), "w"
+        ) as file:
             json.dump(statistics.to_serializable(), file)

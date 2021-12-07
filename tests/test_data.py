@@ -2,9 +2,9 @@ from typing import List
 
 import pytest
 
-from aset.data.annotations import SentenceStartCharsAnnotation, CurrentMatchIndexAnnotation
-from aset.data.data import ASETDocument, ASETNugget, ASETAttribute, ASETDocumentBase
-from aset.data.signals import LabelSignal, CachedDistanceSignal
+from aset.data.annotations import CurrentMatchIndexAnnotation, SentenceStartCharsAnnotation
+from aset.data.data import ASETAttribute, ASETDocument, ASETDocumentBase, ASETNugget
+from aset.data.signals import CachedDistanceSignal, LabelSignal
 
 
 @pytest.fixture

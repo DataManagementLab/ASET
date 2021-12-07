@@ -1,16 +1,16 @@
 import abc
 import logging
 import time
-from typing import Union, Dict, Any, Tuple, List, Type
+from typing import Any, Dict, List, Tuple, Type, Union
 
 import numpy as np
 from scipy.spatial.distance import cosine
 from sklearn.metrics.pairwise import cosine_distances
 
 from aset.config import ConfigurableElement
-from aset.data.data import ASETNugget, ASETAttribute, ASETDocumentBase
-from aset.data.signals import LabelEmbeddingSignal, TextEmbeddingSignal, ContextSentenceEmbeddingSignal, \
-    RelativePositionSignal, DistanceCacheIdSignal, POSTagsSignal
+from aset.data.data import ASETAttribute, ASETDocumentBase, ASETNugget
+from aset.data.signals import ContextSentenceEmbeddingSignal, DistanceCacheIdSignal, LabelEmbeddingSignal, \
+    POSTagsSignal, RelativePositionSignal, TextEmbeddingSignal
 from aset.statistics import Statistics
 from aset.status import StatusFunction
 
@@ -33,6 +33,7 @@ class BaseDistance(ConfigurableElement, abc.ABC):
     functions are free in which signals they require as inputs and may also set signal values. They must be able to
     compute distances between pairs of ASETNuggets, pairs of ASETAttributes, or mixed pairs.
     """
+
     distance_str: str = "BaseDistance"
 
     def __str__(self) -> str:
@@ -92,7 +93,7 @@ class BaseDistance(ConfigurableElement, abc.ABC):
             xs: List[Union[ASETNugget, ASETAttribute]],
             ys: List[Union[ASETNugget, ASETAttribute]],
             statistics: Statistics
-    ) -> np.array:
+    ) -> np.ndarray:
         """
         Compute distances between all pairs from two lists of ASETNuggets/ASETAttributes.
 
@@ -108,7 +109,7 @@ class BaseDistance(ConfigurableElement, abc.ABC):
 
         assert xs != [] and ys != [], "Cannot compute distances for an empty list!"
 
-        res: np.array = np.zeros((len(xs), len(ys)))
+        res: np.ndarray = np.zeros((len(xs), len(ys)))
         for x_ix, x in enumerate(xs):
             for y_ix, y in enumerate(ys):
                 res[x_ix, y_ix] = self.compute_distance(x, y, statistics)
@@ -144,6 +145,10 @@ class BaseDistance(ConfigurableElement, abc.ABC):
         """
         pass  # default behavior: do nothing
 
+    def next_attribute(self) -> None:
+        """Clear any attribute-specific data."""
+        pass  # default behavior: do nothing
+
     @classmethod
     @abc.abstractmethod
     def from_config(cls, config: Dict[str, Any]) -> "BaseDistance":
@@ -158,6 +163,7 @@ class SignalsMeanDistance(BaseDistance):
     works with signals: LabelEmbeddingSignal, TextEmbeddingSignal, ContextSentenceEmbeddingSignal,
         RelativePositionSignal, POSTagsSignal
     """
+
     distance_str: str = "SignalsMeanDistance"
 
     def __init__(self, signal_strings: List[str]) -> None:
@@ -178,49 +184,57 @@ class SignalsMeanDistance(BaseDistance):
     ) -> float:
         statistics["num_calls"] += 1
 
-        distances: np.array = np.zeros(5)
-        is_present: np.array = np.zeros(5)
+        distances: np.ndarray = np.zeros(5)
+        is_present: np.ndarray = np.zeros(5)
 
         label_embedding_signal_str: str = LabelEmbeddingSignal.signal_str
-        if label_embedding_signal_str in self._signal_strings and label_embedding_signal_str in x.signals.keys() and \
-                label_embedding_signal_str in y.signals.keys():
-            cosine_distance: float = cosine(
-                x[label_embedding_signal_str],
-                y[label_embedding_signal_str]
-            )
+        if (
+                label_embedding_signal_str in self._signal_strings
+                and label_embedding_signal_str in x.signals.keys()
+                and label_embedding_signal_str in y.signals.keys()
+        ):
+            cosine_distance: float = float(cosine(x[label_embedding_signal_str], y[label_embedding_signal_str]))
             distances[0] = min(abs(cosine_distance), 1)
             is_present[0] = 1
 
         text_embedding_signal_str: str = TextEmbeddingSignal.signal_str
-        if text_embedding_signal_str in self._signal_strings and text_embedding_signal_str in x.signals.keys() and \
-                text_embedding_signal_str in y.signals.keys():
-            cosine_distance: float = cosine(
-                x[text_embedding_signal_str],
-                y[text_embedding_signal_str]
-            )
+        if (
+                text_embedding_signal_str in self._signal_strings
+                and text_embedding_signal_str in x.signals.keys()
+                and text_embedding_signal_str in y.signals.keys()
+        ):
+            cosine_distance: float = float(cosine(x[text_embedding_signal_str], y[text_embedding_signal_str]))
             distances[1] = min(abs(cosine_distance), 1)
             is_present[1] = 1
 
         context_sentence_embedding_signal_str: str = ContextSentenceEmbeddingSignal.signal_str
-        if context_sentence_embedding_signal_str in self._signal_strings and \
-                context_sentence_embedding_signal_str in x.signals.keys() and \
-                context_sentence_embedding_signal_str in y.signals.keys():
-            cosine_distance: float = cosine(
-                x[context_sentence_embedding_signal_str],
-                y[context_sentence_embedding_signal_str]
+        if (
+                context_sentence_embedding_signal_str in self._signal_strings
+                and context_sentence_embedding_signal_str in x.signals.keys()
+                and context_sentence_embedding_signal_str in y.signals.keys()
+        ):
+            cosine_distance: float = float(
+                cosine(x[context_sentence_embedding_signal_str], y[context_sentence_embedding_signal_str])
             )
             distances[2] = min(abs(cosine_distance), 1)
             is_present[2] = 1
 
         relative_position_signal_str: str = RelativePositionSignal.signal_str
-        if relative_position_signal_str in self._signal_strings and \
-                relative_position_signal_str in x.signals.keys() and relative_position_signal_str in y.signals.keys():
-            relative_distance: float = x[relative_position_signal_str] - y[relative_position_signal_str]
+        if (
+                relative_position_signal_str in self._signal_strings
+                and relative_position_signal_str in x.signals.keys()
+                and relative_position_signal_str in y.signals.keys()
+        ):
+            relative_distance: float = (x[relative_position_signal_str] - y[relative_position_signal_str])
             distances[3] = min(abs(relative_distance), 1)
             is_present[3] = 1
 
         pos_tags_signal_str: str = POSTagsSignal.signal_str
-        if pos_tags_signal_str in x.signals.keys() and pos_tags_signal_str in y.signals.keys():
+        if (
+                pos_tags_signal_str in self._signal_strings
+                and pos_tags_signal_str in x.signals.keys()
+                and pos_tags_signal_str in y.signals.keys()
+        ):
             if x[pos_tags_signal_str] == y[context_sentence_embedding_signal_str]:
                 distances[4] = 0
             else:
@@ -234,7 +248,7 @@ class SignalsMeanDistance(BaseDistance):
             xs: List[Union[ASETNugget, ASETAttribute]],
             ys: List[Union[ASETNugget, ASETAttribute]],
             statistics: Statistics
-    ) -> np.array:
+    ) -> np.ndarray:
         statistics["num_multi_calls"] += 1
 
         assert xs != [] and ys != [], "Cannot compute distances for an empty list!"
@@ -248,41 +262,49 @@ class SignalsMeanDistance(BaseDistance):
         ]
 
         # check that all xs and all ys contain the same signals
-        xs_is_present: np.array = np.zeros(5)
+        xs_is_present: np.ndarray = np.zeros(5)
         for idx in range(5):
             if signal_strings[idx] in self._signal_strings and signal_strings[idx] in xs[0].signals.keys():
                 xs_is_present[idx] = 1
         for x in xs:
             for idx in range(5):
                 if signal_strings[idx] in self._signal_strings:
-                    if xs_is_present[idx] == 1 and signal_strings[idx] not in x.signals.keys() or \
-                            xs_is_present[idx] == 0 and signal_strings[idx] in x.signals.keys():
+                    if (
+                            xs_is_present[idx] == 1
+                            and signal_strings[idx] not in x.signals.keys()
+                            or xs_is_present[idx] == 0
+                            and signal_strings[idx] in x.signals.keys()
+                    ):
                         assert False, "All xs must have the same signals!"
 
-        ys_is_present: np.array = np.zeros(5)
+        ys_is_present: np.ndarray = np.zeros(5)
         for idx in range(5):
             if signal_strings[idx] in self._signal_strings and signal_strings[idx] in ys[0].signals.keys():
                 ys_is_present[idx] = 1
         for y in ys:
             for idx in range(5):
                 if signal_strings[idx] in self._signal_strings:
-                    if ys_is_present[idx] == 1 and signal_strings[idx] not in y.signals.keys() or \
-                            ys_is_present[idx] == 0 and signal_strings[idx] in y.signals.keys():
+                    if (
+                            ys_is_present[idx] == 1
+                            and signal_strings[idx] not in y.signals.keys()
+                            or ys_is_present[idx] == 0
+                            and signal_strings[idx] in y.signals.keys()
+                    ):
                         assert False, "All ys must have the same signals!"
 
         # compute distances signal by signal
-        distances: np.array = np.zeros((len(xs), len(ys)))
+        distances: np.ndarray = np.zeros((len(xs), len(ys)))
         for idx in range(3):
             if xs_is_present[idx] == 1 and ys_is_present[idx] == 1:
-                x_embeddings: np.array = np.array([x[signal_strings[idx]] for x in xs])
-                y_embeddings: np.array = np.array([y[signal_strings[idx]] for y in ys])
-                tmp: np.array = cosine_distances(x_embeddings, y_embeddings)
+                x_embeddings: np.ndarray = np.array([x[signal_strings[idx]] for x in xs])
+                y_embeddings: np.ndarray = np.array([y[signal_strings[idx]] for y in ys])
+                tmp: np.ndarray = cosine_distances(x_embeddings, y_embeddings)
                 distances = np.add(distances, tmp)
 
         if xs_is_present[3] == 1 and ys_is_present[3] == 1:
-            x_positions: np.array = np.array([x[signal_strings[3]] for x in xs])
-            y_positions: np.array = np.array([y[signal_strings[3]] for y in ys])
-            tmp: np.array = np.zeros((len(x_positions), len(y_positions)))
+            x_positions: np.ndarray = np.array([x[signal_strings[3]] for x in xs])
+            y_positions: np.ndarray = np.array([y[signal_strings[3]] for y in ys])
+            tmp: np.ndarray = np.zeros((len(x_positions), len(y_positions)))
             for x_ix, x_value in enumerate(x_positions):
                 for y_ix, y_value in enumerate(y_positions):
                     tmp[x_ix, y_ix] = np.abs(x_value - y_value)
@@ -291,14 +313,14 @@ class SignalsMeanDistance(BaseDistance):
         if xs_is_present[4] == 1 and ys_is_present[4] == 1:
             x_values: List[List[str]] = [x[signal_strings[4]] for x in xs]
             y_values: List[List[str]] = [y[signal_strings[4]] for y in ys]
-            tmp: np.array = np.ones((len(x_values), len(y_values)))
+            tmp: np.ndarray = np.ones((len(x_values), len(y_values)))
             for x_ix, x_value in enumerate(x_values):
                 for y_ix, y_value in enumerate(y_values):
                     if x_value == y_value:
                         tmp[x_ix, y_ix] = 0
             distances = np.add(distances, tmp)
 
-        actually_present: np.array = xs_is_present * ys_is_present
+        actually_present: np.ndarray = xs_is_present * ys_is_present
         if np.sum(actually_present) == 0:
             return np.ones_like(distances)
         else:
@@ -325,6 +347,7 @@ class CachedDistance(BaseDistance):
 
     works with signals: DistanceCacheIdSignal
     """
+
     distance_str: str = "CachedDistance"
 
     def __init__(self, distance: BaseDistance) -> None:
@@ -408,9 +431,9 @@ class CachedDistance(BaseDistance):
             xs: List[Union[ASETNugget, ASETAttribute]],
             ys: List[Union[ASETNugget, ASETAttribute]],
             statistics: Statistics
-    ) -> np.array:
+    ) -> np.ndarray:
         # compute the distances
-        distances: np.array = self._distance.compute_distances(xs, ys, statistics)
+        distances: np.ndarray = self._distance.compute_distances(xs, ys, statistics)
 
         # cache the distances
         for x_ix, x in enumerate(xs):
@@ -423,10 +446,7 @@ class CachedDistance(BaseDistance):
                     y[DistanceCacheIdSignal] = self._next_cache_id
                     self._next_cache_id += 1
 
-                cache_dict_id: Tuple[int, int] = (
-                    x[DistanceCacheIdSignal],
-                    y[DistanceCacheIdSignal]
-                )
+                cache_dict_id: Tuple[int, int] = (x[DistanceCacheIdSignal], y[DistanceCacheIdSignal])
                 self._distance_cache[cache_dict_id] = distances[x_ix, y_ix]
 
         return distances

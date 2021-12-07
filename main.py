@@ -4,11 +4,11 @@ import sys
 
 import datasets.aviation.aviation as dataset
 from aset.data.annotations import SentenceStartCharsAnnotation
-from aset.data.data import ASETDocumentBase, ASETDocument, ASETAttribute
+from aset.data.data import ASETAttribute, ASETDocument, ASETDocumentBase
 from aset.matching.distance import SignalsMeanDistance
 from aset.matching.phase import TreeSearchMatchingPhase
-from aset.preprocessing.embedding import BERTContextSentenceEmbedder, FastTextLabelEmbedder, SBERTTextEmbedder, \
-    RelativePositionEmbedder, SBERTExamplesEmbedder
+from aset.preprocessing.embedding import BERTContextSentenceEmbedder, FastTextLabelEmbedder, RelativePositionEmbedder, \
+    SBERTExamplesEmbedder, SBERTTextEmbedder
 from aset.preprocessing.extraction import StanzaNERExtractor
 from aset.preprocessing.phase import PreprocessingPhase
 from aset.resources import ResourceManager
@@ -96,11 +96,7 @@ if __name__ == "__main__":
                 # get user feedback
                 sys.stdout.flush()
                 sys.stderr.flush()
-                print("{}? '{}' from '{}'".format(
-                    attribute.name,
-                    nugget.text.ljust(40),
-                    context_sentence
-                ))
+                print("{}? '{}' from '{}'".format(attribute.name, nugget.text.ljust(40), context_sentence))
 
                 while True:
                     s: str = input("y/n? ")
