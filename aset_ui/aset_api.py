@@ -86,6 +86,48 @@ class ASETAPI(QObject):
             logger.error(str(e))
             self.error.emit(str(e))
 
+    @pyqtSlot(str, ASETDocumentBase)
+    def add_attribute(self, name, document_base):
+        logger.debug("Called slot 'add_attribute'.")
+        self.status.emit("Adding attribute...", -1)
+        try:
+            if name in [attribute.name for attribute in document_base.attributes]:
+                logger.error("Attribute name already exists!")
+                self.error.emit("Attribute name already exists!")
+            elif name == "":
+                logger.error("Attribute name must not be empty!")
+                self.error.emit("Attribute name must not be empty!")
+            else:
+                document_base.attributes.append(ASETAttribute(name))
+                self.document_base_to_ui.emit(document_base)
+                self.finished.emit("Finished!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(str, ASETDocumentBase)
+    def remove_attribute(self, name, document_base):
+        logger.debug("Called slot 'remove_attribute'.")
+        self.status.emit("Removing attribute...", -1)
+        try:
+            if name in [attribute.name for attribute in document_base.attributes]:
+                for document in document_base.documents:
+                    if name in document.attribute_mappings.keys():
+                        del document.attribute_mappings[name]
+
+                for attribute in document_base.attributes:
+                    if attribute.name == name:
+                        document_base.attributes.remove(attribute)
+                        break
+                self.document_base_to_ui.emit(document_base)
+                self.finished.emit("Finished!")
+            else:
+                logger.error("Attribute name does not exist!")
+                self.error.emit("Attribute name does not exist!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
     @pyqtSlot(str)
     def load_document_base_from_bson(self, path):
         logger.debug("Called slot 'load_document_base_from_bson'.")
@@ -138,6 +180,19 @@ class ASETAPI(QObject):
         except FileNotFoundError:
             logger.error("Directory does not exist!")
             self.error.emit("Directory does not exist!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(ASETDocumentBase)
+    def forget_attribute_mappings(self, document_base):
+        logger.debug("Called slot 'forget_attribute_mappings'.")
+        self.status.emit("Forgetting attribute mappings...", -1)
+        try:
+            for document in document_base.documents:
+                document.attribute_mappings.clear()
+            self.document_base_to_ui.emit(document_base)
+            self.finished.emit("Finished!")
         except Exception as e:
             logger.error(str(e))
             self.error.emit(str(e))

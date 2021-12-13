@@ -3,7 +3,7 @@ import logging
 from PyQt6.QtCore import QMutex, Qt, QThread, QWaitCondition, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, \
-    QVBoxLayout, QWidget
+    QVBoxLayout, QWidget, QInputDialog
 
 from aset.data.data import ASETDocumentBase
 from aset.matching.phase import BaseMatchingPhase
@@ -22,9 +22,12 @@ class MainWindow(QMainWindow):
     # signals (aset ui --> aset api)
     ################################
     create_document_base = pyqtSignal(str, list)
+    add_attribute = pyqtSignal(str, ASETDocumentBase)
+    remove_attribute = pyqtSignal(str, ASETDocumentBase)
     load_document_base_from_bson = pyqtSignal(str)
     save_document_base_to_bson = pyqtSignal(str, ASETDocumentBase)
     save_table_to_csv = pyqtSignal(str, ASETDocumentBase)
+    forget_attribute_mappings = pyqtSignal(ASETDocumentBase)
     load_default_preprocessing_phase = pyqtSignal()
     load_preprocessing_phase_from_config = pyqtSignal(str)
     save_preprocessing_phase_to_config = pyqtSignal(str, PreprocessingPhase)
@@ -77,6 +80,9 @@ class MainWindow(QMainWindow):
 
         self.save_document_base_to_bson_action.setEnabled(True)
         self.save_table_to_csv_action.setEnabled(True)
+        self.add_attribute_action.setEnabled(True)
+        self.remove_attribute_action.setEnabled(True)
+        self.forget_attribute_mappings_action.setEnabled(True)
         if self.preprocessing_phase is not None:
             self.run_preprocessing_phase_action.setEnabled(True)
         if self.matching_phase is not None:
@@ -113,9 +119,12 @@ class MainWindow(QMainWindow):
     # noinspection PyUnresolvedReferences
     def _connect_slots_and_signals(self):
         self.create_document_base.connect(self.api.create_document_base)
+        self.add_attribute.connect(self.api.add_attribute)
+        self.remove_attribute.connect(self.api.remove_attribute)
         self.load_document_base_from_bson.connect(self.api.load_document_base_from_bson)
         self.save_document_base_to_bson.connect(self.api.save_document_base_to_bson)
         self.save_table_to_csv.connect(self.api.save_table_to_csv)
+        self.forget_attribute_mappings.connect(self.api.forget_attribute_mappings)
         self.load_default_preprocessing_phase.connect(self.api.load_default_preprocessing_phase)
         self.load_preprocessing_phase_from_config.connect(self.api.load_preprocessing_phase_from_config)
         self.save_preprocessing_phase_to_config.connect(self.api.save_preprocessing_phase_to_config)
@@ -152,6 +161,20 @@ class MainWindow(QMainWindow):
     def _create_document_base(self):
         self.show_create_document_base_widget()
 
+    def _add_attribute(self):
+        name, ok = QInputDialog.getText(self, "Create Attribute", "Attribute name:")
+        if ok:
+            self._disable_global_input()
+            # noinspection PyUnresolvedReferences
+            self.add_attribute.emit(str(name), self.document_base)
+
+    def _remove_attribute(self):
+        name, ok = QInputDialog.getText(self, "Remove Attribute", "Attribute name:")
+        if ok:
+            self._disable_global_input()
+            # noinspection PyUnresolvedReferences
+            self.remove_attribute.emit(str(name), self.document_base)
+
     def _load_document_base_from_bson(self):
         path = str(QFileDialog.getOpenFileName(self, "Choose a document collection .bson file!")[0])
         if path != "":
@@ -174,6 +197,11 @@ class MainWindow(QMainWindow):
                 self._disable_global_input()
                 # noinspection PyUnresolvedReferences
                 self.save_table_to_csv.emit(path, self.document_base)
+
+    def _forget_attribute_mappings(self):
+        self._disable_global_input()
+        # noinspection PyUnresolvedReferences
+        self.forget_attribute_mappings.emit(self.document_base)
 
     def _load_default_preprocessing_phase(self):
         self._disable_global_input()
@@ -355,6 +383,18 @@ class MainWindow(QMainWindow):
         self.create_document_base_action.triggered.connect(self._create_document_base)
         self.all_actions.append(self.create_document_base_action)
 
+        self.add_attribute_action = QAction("&Add attribute", self)
+        self.add_attribute_action.setStatusTip("Add a new attribute to the document base.")
+        self.add_attribute_action.triggered.connect(self._add_attribute)
+        self.add_attribute_action.setEnabled(False)
+        self.all_actions.append(self.add_attribute_action)
+
+        self.remove_attribute_action = QAction("&Remove attribute", self)
+        self.remove_attribute_action.setStatusTip("Remove an attribute from the document base.")
+        self.remove_attribute_action.triggered.connect(self._remove_attribute)
+        self.remove_attribute_action.setEnabled(False)
+        self.all_actions.append(self.remove_attribute_action)
+
         self.load_document_base_from_bson_action = QAction("&Load document base", self)
         self.load_document_base_from_bson_action.setShortcut("Ctrl+O")
         self.load_document_base_from_bson_action.setStatusTip("Load the document base from a .bson file.")
@@ -373,6 +413,12 @@ class MainWindow(QMainWindow):
         self.save_table_to_csv_action.triggered.connect(self._save_table_to_csv)
         self.save_table_to_csv_action.setEnabled(False)
         self.all_actions.append(self.save_table_to_csv_action)
+
+        self.forget_attribute_mappings_action = QAction("&Forget attribute mappings", self)
+        self.forget_attribute_mappings_action.setStatusTip("Forget the current matching.")
+        self.forget_attribute_mappings_action.triggered.connect(self._forget_attribute_mappings)
+        self.forget_attribute_mappings_action.setEnabled(False)
+        self.all_actions.append(self.forget_attribute_mappings_action)
 
         self.load_default_preprocessing_phase_action = QAction("&Load default preprocessing phase", self)
         self.load_default_preprocessing_phase_action.setStatusTip("Load the default preprocessing phase.")
@@ -455,6 +501,9 @@ class MainWindow(QMainWindow):
         self.document_base_menu.addAction(self.load_document_base_from_bson_action)
         self.document_base_menu.addAction(self.save_document_base_to_bson_action)
         self.document_base_menu.addAction(self.save_table_to_csv_action)
+        self.document_base_menu.addAction(self.add_attribute_action)
+        self.document_base_menu.addAction(self.remove_attribute_action)
+        self.document_base_menu.addAction(self.forget_attribute_mappings_action)
 
         self.preprocessing_menu = self.menubar.addMenu("&Preprocessing")
         self.preprocessing_menu.setFont(MENU_FONT)
