@@ -1,68 +1,69 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, \
-    QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
-from aset_ui.style import BUTTON_FONT, CODE_FONT, CODE_FONT_BOLD, HEADER_FONT, LABEL_FONT, SUBHEADER_FONT
+from aset_ui.common import BUTTON_FONT, CODE_FONT, CODE_FONT_BOLD, LABEL_FONT, MainWindowContent, \
+    MainWindowContentSection, CustomScrollableListItem, CustomScrollableList
 
 
-class DocumentBaseViewerWidget(QWidget):
+class DocumentBaseViewerWidget(MainWindowContent):
     def __init__(self, main_window):
-        super(DocumentBaseViewerWidget, self).__init__()
-        self.main_window = main_window
+        super(DocumentBaseViewerWidget, self).__init__(main_window, "Document Base")
 
-        self.layout = QVBoxLayout(self)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.layout.setSpacing(30)
+        # controls
+        self.controls = QWidget()
+        self.controls_layout = QHBoxLayout(self.controls)
+        self.controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.controls_layout.setSpacing(10)
+        self.controls_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.layout.addWidget(self.controls)
 
-        # header
-        self.header = QLabel("Document Base")
-        self.header.setFont(HEADER_FONT)
-        self.layout.addWidget(self.header)
+        self.create_document_base_button = QPushButton("Create a new Document Base")
+        self.create_document_base_button.setFont(BUTTON_FONT)
+        self.create_document_base_button.clicked.connect(self.main_window.show_document_base_creator_widget_task)
+        self.controls_layout.addWidget(self.create_document_base_button)
+
+        self.load_and_run_default_preprocessing_phase_button = QPushButton("Preprocess the Document Base")
+        self.load_and_run_default_preprocessing_phase_button.setFont(BUTTON_FONT)
+        self.load_and_run_default_preprocessing_phase_button.clicked.connect(
+            self.main_window.load_and_run_default_preprocessing_phase_task
+        )
+        self.controls_layout.addWidget(self.load_and_run_default_preprocessing_phase_button)
+
+        self.load_and_run_default_matching_phase_button = QPushButton("Match the Nuggets to the Attributes")
+        self.load_and_run_default_matching_phase_button.setFont(BUTTON_FONT)
+        self.load_and_run_default_matching_phase_button.clicked.connect(
+            self.main_window.load_and_run_default_matching_phase_task
+        )
+        self.controls_layout.addWidget(self.load_and_run_default_matching_phase_button)
+
+        self.save_table_button = QPushButton("Export the Table to CSV")
+        self.save_table_button.setFont(BUTTON_FONT)
+        self.save_table_button.clicked.connect(self.main_window.save_table_to_csv_task)
+        self.controls_layout.addWidget(self.save_table_button)
 
         # documents
-        self.documents = QWidget()
-        self.documents_layout = QVBoxLayout(self.documents)
-        self.documents_layout.setContentsMargins(0, 0, 0, 0)
-        self.documents_layout.setSpacing(10)
+        self.documents = MainWindowContentSection(self, "Documents:")
         self.layout.addWidget(self.documents)
-
-        self.documents_subheader = QLabel("Documents:")
-        self.documents_subheader.setFont(SUBHEADER_FONT)
-        self.documents_layout.addWidget(self.documents_subheader)
 
         self.num_documents = QLabel("number of documents: -")
         self.num_documents.setFont(LABEL_FONT)
-        self.documents_layout.addWidget(self.num_documents)
+        self.documents.layout.addWidget(self.num_documents)
 
         self.num_nuggets = QLabel("number of nuggets: -")
         self.num_nuggets.setFont(LABEL_FONT)
-        self.documents_layout.addWidget(self.num_nuggets)
+        self.documents.layout.addWidget(self.num_nuggets)
 
         # attributes
-        self.attributes = QWidget()
-        self.attributes_layout = QVBoxLayout(self.attributes)
-        self.attributes_layout.setContentsMargins(0, 0, 0, 0)
-        self.attributes_layout.setSpacing(10)
+        self.attributes = MainWindowContentSection(self, "Attributes:")
         self.layout.addWidget(self.attributes)
 
-        self.attributes_subheader = QLabel("Attributes:")
-        self.attributes_subheader.setFont(SUBHEADER_FONT)
-        self.attributes_layout.addWidget(self.attributes_subheader)
+        self.add_attribute_button = QPushButton("Add Attribute")
+        self.add_attribute_button.setFont(BUTTON_FONT)
+        self.add_attribute_button.clicked.connect(self.main_window.add_attribute_task)
 
-        self.attribute_widgets = []
-        self.num_visible_attribute_widgets = 0
-        self.attribute_list = QWidget()
-        self.attribute_list_layout = QVBoxLayout(self.attribute_list)
-        self.attribute_list_layout.setContentsMargins(0, 0, 10, 0)
-        self.attribute_list_layout.setSpacing(10)
-        self.attribute_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        self.attribute_scroll_area = QScrollArea()
-        self.attribute_scroll_area.setWidgetResizable(True)
-        self.attribute_scroll_area.setFrameStyle(0)
-        self.attribute_scroll_area.setWidget(self.attribute_list)
-        self.attributes_layout.addWidget(self.attribute_scroll_area)
+        self.attributes_list = CustomScrollableList(self, AttributeWidget, self.add_attribute_button)
+        self.attributes.layout.addWidget(self.attributes_list)
 
     def update_document_base(self, document_base):
         # update documents
@@ -70,97 +71,130 @@ class DocumentBaseViewerWidget(QWidget):
         self.num_nuggets.setText(f"number of nuggets: {len(document_base.nuggets)}")
 
         # update attributes
-        # make sure that there are enough attribute widgets
-        while len(document_base.attributes) > len(self.attribute_widgets):
-            self.attribute_widgets.append(AttributeWidget(self))
+        self.attributes_list.update_item_list(document_base.attributes, document_base)
 
-        # make sure that the correct number of attribute widgets is shown
-        while len(document_base.attributes) > self.num_visible_attribute_widgets:
-            widget = self.attribute_widgets[self.num_visible_attribute_widgets]
-            self.attribute_list_layout.addWidget(widget)
-            self.num_visible_attribute_widgets += 1
-        while len(document_base.attributes) < self.num_visible_attribute_widgets:
-            widget = self.attribute_widgets[self.num_visible_attribute_widgets - 1]
-            widget.hide()
-            self.attribute_list_layout.removeWidget(widget)
-            self.num_visible_attribute_widgets -= 1
+    def enable_input(self):
+        self.create_document_base_button.setEnabled(True)
 
-        # update the attribute widgets
-        max_attribute_name_len = max([len(attribute.name) for attribute in document_base.attributes])
-        for attribute, widget in zip(document_base.attributes, self.attribute_widgets[: len(document_base.attributes)]):
-            widget.update_attribute(attribute, document_base, max_attribute_name_len)
+        if self.main_window.document_base is not None:
+            self.load_and_run_default_preprocessing_phase_button.setEnabled(True)
+            self.load_and_run_default_matching_phase_button.setEnabled(True)
+            self.save_table_button.setEnabled(True)
+            self.add_attribute_button.setEnabled(True)
+            self.attributes_list.enable_input()
+
+    def disable_input(self):
+        self.create_document_base_button.setDisabled(True)
+        self.load_and_run_default_preprocessing_phase_button.setDisabled(True)
+        self.load_and_run_default_matching_phase_button.setDisabled(True)
+        self.save_table_button.setDisabled(True)
+        self.add_attribute_button.setDisabled(True)
+        self.attributes_list.disable_input()
 
 
-class AttributeWidget(QFrame):
+class AttributeWidget(CustomScrollableListItem):
     def __init__(self, document_base_viewer):
         super(AttributeWidget, self).__init__(document_base_viewer)
         self.document_base_viewer = document_base_viewer
         self.attribute = None
 
-        self.setFixedHeight(30)
+        self.setFixedHeight(40)
         self.setStyleSheet("background-color: white")
 
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(20, 0, 0, 0)
-        self.layout.setSpacing(30)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.layout.setContentsMargins(20, 0, 20, 0)
+        self.layout.setSpacing(40)
 
         self.attribute_name = QLabel()
         self.attribute_name.setFont(CODE_FONT_BOLD)
-        self.layout.addWidget(self.attribute_name)
+        self.layout.addWidget(self.attribute_name, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.num_matched = QLabel("matches: -")
         self.num_matched.setFont(CODE_FONT)
-        self.layout.addWidget(self.num_matched)
+        self.layout.addWidget(self.num_matched, alignment=Qt.AlignmentFlag.AlignLeft)
 
-    def update_attribute(self, attribute, document_base, max_attribute_name_len):
-        self.attribute = attribute
+        self.buttons_widget = QWidget()
+        self.buttons_layout = QHBoxLayout(self.buttons_widget)
+        self.buttons_layout.setContentsMargins(0, 0, 0, 0)
+        self.buttons_layout.setSpacing(10)
+        self.layout.addWidget(self.buttons_widget, alignment=Qt.AlignmentFlag.AlignRight)
 
-        self.attribute_name.setText(attribute.name + (" " * (max_attribute_name_len - len(attribute.name))))
+        self.forget_matches_button = QPushButton()
+        self.forget_matches_button.setIcon(QIcon("aset_ui/resources/redo.svg"))
+        self.forget_matches_button.setToolTip("Forget matches for this attribute.")
+        self.forget_matches_button.setFlat(True)
+        self.forget_matches_button.clicked.connect(self._forget_matches_button_clicked)
+        self.buttons_layout.addWidget(self.forget_matches_button)
+
+        self.remove_button = QPushButton()
+        self.remove_button.setIcon(QIcon("aset_ui/resources/trash.svg"))
+        self.remove_button.setToolTip("Remove this attribute.")
+        self.remove_button.setFlat(True)
+        self.remove_button.clicked.connect(self._remove_button_clicked)
+        self.buttons_layout.addWidget(self.remove_button)
+
+    def update_item(self, item, params=None):
+        self.attribute = item
+
+        if len(params.attributes) == 0:
+            max_attribute_name_len = 10
+        else:
+            max_attribute_name_len = max(len(attribute.name) for attribute in params.attributes)
+        self.attribute_name.setText(self.attribute.name + (" " * (max_attribute_name_len - len(self.attribute.name))))
+
+        mappings_in_some_documents = False
+        no_mappings_in_some_documents = False
         num_matches = 0
-        for document in document_base.documents:
-            if attribute.name in document.attribute_mappings.keys() and \
-                    document.attribute_mappings[attribute.name] != []:
-                num_matches += 1
+        for document in params.documents:
+            if self.attribute.name in document.attribute_mappings.keys():
+                mappings_in_some_documents = True
+                if document.attribute_mappings[self.attribute.name] != []:
+                    num_matches += 1
+            else:
+                no_mappings_in_some_documents = True
+
+        if not mappings_in_some_documents and no_mappings_in_some_documents:
+            self.num_matched.setText("not matched yet")
+        elif mappings_in_some_documents and no_mappings_in_some_documents:
+            self.num_matched.setText("only partly matched")
+        else:
             self.num_matched.setText(f"matches: {num_matches}")
 
+    def enable_input(self):
+        self.forget_matches_button.setEnabled(True)
+        self.remove_button.setEnabled(True)
 
-class CreateDocumentBaseWidget(QWidget):
+    def disable_input(self):
+        self.forget_matches_button.setDisabled(True)
+        self.remove_button.setDisabled(True)
+
+    def _forget_matches_button_clicked(self):
+        self.document_base_viewer.main_window.forget_matches_for_attribute_with_given_name_task(self.attribute.name)
+
+    def _remove_button_clicked(self):
+        self.document_base_viewer.main_window.remove_attribute_with_given_name_task(self.attribute.name)
+
+
+class DocumentBaseCreatorWidget(MainWindowContent):
     def __init__(self, main_window) -> None:
-        super(CreateDocumentBaseWidget, self).__init__()
-        self.main_window = main_window
+        super(DocumentBaseCreatorWidget, self).__init__(main_window, "Create Document Base")
 
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(10)
-
-        # header
-        self.header = QLabel("Create Document Base")
-        self.header.setFont(HEADER_FONT)
-        self.layout.addWidget(self.header)
-
-        self.documents_subheader = QLabel("Documents:")
-        self.documents_subheader.setFont(SUBHEADER_FONT)
-        self.layout.addWidget(self.documents_subheader)
+        self.documents = MainWindowContentSection(self, "Documents:")
+        self.layout.addWidget(self.documents)
 
         self.documents_explanation = QLabel(
             "Enter the path of the directory that contains the documents as .txt files."
         )
         self.documents_explanation.setFont(LABEL_FONT)
-        self.layout.addWidget(self.documents_explanation)
-
-        self.path_wrapper_widget = QWidget()
-        self.path_wrapper_layout = QHBoxLayout(self.path_wrapper_widget)
-        self.path_wrapper_layout.setContentsMargins(0, 0, 10, 0)
-        self.layout.addWidget(self.path_wrapper_widget)
+        self.documents.layout.addWidget(self.documents_explanation)
 
         self.path_widget = QFrame()
         self.path_layout = QHBoxLayout(self.path_widget)
-        self.path_layout.setContentsMargins(10, 0, 10, 0)
+        self.path_layout.setContentsMargins(20, 0, 20, 0)
         self.path_layout.setSpacing(10)
         self.path_widget.setStyleSheet("background-color: white")
         self.path_widget.setFixedHeight(40)
-        self.path_wrapper_layout.addWidget(self.path_widget)
+        self.documents.layout.addWidget(self.path_widget)
 
         self.path = QLineEdit()
         self.path.setFont(CODE_FONT_BOLD)
@@ -173,39 +207,27 @@ class CreateDocumentBaseWidget(QWidget):
         self.edit_path_button.clicked.connect(self._edit_path_button_clicked)
         self.path_layout.addWidget(self.edit_path_button)
 
-        self.attributes_subheader = QLabel("Attributes:")
-        self.attributes_subheader.setFont(SUBHEADER_FONT)
-        self.layout.addWidget(self.attributes_subheader)
+        self.attributes = MainWindowContentSection(self, "Attributes:")
+        self.layout.addWidget(self.attributes)
 
         self.labels_explanation = QLabel("Enter the attribute names.")
         self.labels_explanation.setFont(LABEL_FONT)
-        self.layout.addWidget(self.labels_explanation)
-
-        self.create_attribute_widgets = []
-        self.num_visible_create_attribute_widgets = 0
-        self.create_attribute_list = QWidget()
-        self.create_attribute_list_layout = QVBoxLayout(self.create_attribute_list)
-        self.create_attribute_list_layout.setContentsMargins(0, 0, 10, 0)
-        self.create_attribute_list_layout.setSpacing(10)
-        self.create_attribute_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        self.create_attribute_scroll_area = QScrollArea()
-        self.create_attribute_scroll_area.setWidgetResizable(True)
-        self.create_attribute_scroll_area.setFrameStyle(0)
-        self.create_attribute_scroll_area.setWidget(self.create_attribute_list)
-        self.layout.addWidget(self.create_attribute_scroll_area)
+        self.attributes.layout.addWidget(self.labels_explanation)
 
         self.create_attribute_button = QPushButton("New Attribute")
         self.create_attribute_button.setFont(BUTTON_FONT)
         self.create_attribute_button.clicked.connect(self._create_attribute_button_clicked)
-        self.create_attribute_list_layout.addWidget(self.create_attribute_button)
+
+        self.attribute_names = []
+        self.attributes_list = CustomScrollableList(self, AttributeCreatorWidget, self.create_attribute_button)
+        self.attributes.layout.addWidget(self.attributes_list)
 
         self.buttons_widget = QWidget()
         self.buttons_layout = QHBoxLayout(self.buttons_widget)
-        self.buttons_layout.setContentsMargins(0, 0, 10, 0)
+        self.buttons_layout.setContentsMargins(0, 0, 0, 0)
         self.buttons_layout.setSpacing(10)
         self.buttons_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.layout.addWidget(self.buttons_widget)
+        self.attributes.layout.addWidget(self.buttons_widget)
 
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setFont(BUTTON_FONT)
@@ -217,70 +239,69 @@ class CreateDocumentBaseWidget(QWidget):
         self.create_document_base_button.clicked.connect(self._create_document_base_button_clicked)
         self.buttons_layout.addWidget(self.create_document_base_button)
 
-        self._create_attribute_button_clicked(None)
+    def enable_input(self):
+        self.edit_path_button.setEnabled(True)
+        self.create_attribute_button.setEnabled(True)
+        self.cancel_button.setEnabled(True)
+        self.create_document_base_button.setEnabled(True)
+        self.attributes_list.enable_input()
+
+    def disable_input(self):
+        self.edit_path_button.setDisabled(True)
+        self.create_attribute_button.setDisabled(True)
+        self.cancel_button.setDisabled(True)
+        self.create_document_base_button.setDisabled(True)
+        self.attributes_list.disable_input()
 
     def initialize_for_new_document_base(self):
+        self.path.setText("")
+        self.attribute_names = []
+        self.attributes_list.update_item_list([])
 
-        # remove all the attribute widgets
-        while 0 < self.num_visible_create_attribute_widgets:
-            widget = self.create_attribute_widgets[self.num_visible_create_attribute_widgets - 1]
-            widget.hide()
-            self.create_attribute_list_layout.removeWidget(widget)
-            self.num_visible_create_attribute_widgets -= 1
+    def delete_attribute(self, attribute_name):
+        self.attribute_names = []
+        for attribute_widget in self.attributes_list.item_widgets[:self.attributes_list.num_visible_item_widgets]:
+            self.attribute_names.append(attribute_widget.name.text())
+        self.attribute_names.remove(attribute_name)
+        self.attributes_list.update_item_list(self.attribute_names)
+        self.attributes_list.last_item_widget().name.setFocus()
 
-    def _edit_path_button_clicked(self, _):
+    def _edit_path_button_clicked(self):
         path = str(QFileDialog.getExistingDirectory(self, "Choose a directory of text files."))
         if path != "":
             path = f"{path}/*.txt"
             self.path.setText(path)
 
-    def _create_attribute_button_clicked(self, _):
+    def _create_attribute_button_clicked(self):
+        self.attribute_names = []
+        for attribute_widget in self.attributes_list.item_widgets[:self.attributes_list.num_visible_item_widgets]:
+            self.attribute_names.append(attribute_widget.name.text())
+        self.attribute_names.append("")
+        self.attributes_list.update_item_list(self.attribute_names)
+        self.attributes_list.last_item_widget().name.setFocus()
 
-        # make sure there are enough create attribute widgets
-        if len(self.create_attribute_widgets) < self.num_visible_create_attribute_widgets + 1:
-            self.create_attribute_widgets.append(CreateAttributeWidget(self))
+    def _cancel_button_clicked(self):
+        self.main_window.show_start_menu_widget()
+        self.main_window.enable_global_input()
 
-        # initialize the new create attribute widget and show it
-        widget = self.create_attribute_widgets[self.num_visible_create_attribute_widgets]
-        widget.initialize_for_new_attribute()
-        self.create_attribute_list_layout.addWidget(widget)
-        widget.show()
-        self.num_visible_create_attribute_widgets += 1
-        self.create_attribute_list_layout.removeWidget(self.create_attribute_button)
-        self.create_attribute_list_layout.addWidget(self.create_attribute_button)
-
-    def _cancel_button_clicked(self, _):
-        self.main_window.show_document_base_viewer_widget()
-
-    def _create_document_base_button_clicked(self, _):
-        path = self.path.text()
-        attribute_names = []
-        for widget in self.create_attribute_widgets[:self.num_visible_create_attribute_widgets]:
-            attribute_names.append(widget.name.text())
-        self.main_window.create_new_document_base(path, attribute_names)
-
-    def delete_attribute(self, attribute_widget):
-        attribute_widget.hide()
-        self.create_attribute_list_layout.removeWidget(attribute_widget)
-        self.create_attribute_widgets.remove(attribute_widget)
-        self.create_attribute_widgets.append(attribute_widget)
-        self.num_visible_create_attribute_widgets -= 1
-        self.create_attribute_list_layout.removeWidget(self.create_attribute_button)
-        self.create_attribute_list_layout.addWidget(self.create_attribute_button)
+    def _create_document_base_button_clicked(self):
+        self.attribute_names = []
+        for attribute_widget in self.attributes_list.item_widgets[:self.attributes_list.num_visible_item_widgets]:
+            self.attribute_names.append(attribute_widget.name.text())
+        self.main_window.create_document_base_task(self.path.text(), self.attribute_names)
 
 
-class CreateAttributeWidget(QFrame):
-    def __init__(self, create_document_base_widget) -> None:
-        super(CreateAttributeWidget, self).__init__()
-
-        self.create_document_base_widget = create_document_base_widget
+class AttributeCreatorWidget(CustomScrollableListItem):
+    def __init__(self, document_base_creator_widget) -> None:
+        super(AttributeCreatorWidget, self).__init__(document_base_creator_widget)
+        self.document_base_creator_widget = document_base_creator_widget
 
         self.setFixedHeight(40)
+        self.setStyleSheet("background-color: white")
 
         self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(10, 0, 10, 0)
+        self.layout.setContentsMargins(20, 0, 20, 0)
         self.layout.setSpacing(10)
-        self.setStyleSheet("background-color: white")
 
         self.name = QLineEdit()
         self.name.setFont(CODE_FONT_BOLD)
@@ -288,13 +309,19 @@ class CreateAttributeWidget(QFrame):
         self.layout.addWidget(self.name)
 
         self.delete_button = QPushButton()
-        self.delete_button.setIcon(QIcon("aset_ui/resources/incorrect.svg"))
+        self.delete_button.setIcon(QIcon("aset_ui/resources/trash.svg"))
         self.delete_button.setFlat(True)
         self.delete_button.clicked.connect(self._delete_button_clicked)
         self.layout.addWidget(self.delete_button)
 
-    def initialize_for_new_attribute(self):
-        self.name.setText("")
+    def update_item(self, item, params=None):
+        self.name.setText(item)
 
-    def _delete_button_clicked(self, _):
-        self.create_document_base_widget.delete_attribute(self)
+    def _delete_button_clicked(self):
+        self.document_base_creator_widget.delete_attribute(self.name.text())
+
+    def enable_input(self):
+        self.delete_button.setEnabled(True)
+
+    def disable_input(self):
+        self.delete_button.setEnabled(False)

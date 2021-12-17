@@ -2,331 +2,322 @@ import logging
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QTextCursor
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from aset.data.signals import CachedContextSentenceSignal, CachedDistanceSignal
-from aset_ui.style import BUTTON_FONT, CODE_FONT, CODE_FONT_BOLD, HEADER_FONT, LABEL_FONT
+from aset_ui.common import BUTTON_FONT, CODE_FONT, CODE_FONT_BOLD, LABEL_FONT, MainWindowContent, \
+    CustomScrollableList, CustomScrollableListItem
 
 logger = logging.getLogger(__name__)
 
 
-class InteractiveMatchingWidget(QWidget):
+class InteractiveMatchingWidget(MainWindowContent):
     def __init__(self, main_window):
-        super(InteractiveMatchingWidget, self).__init__(main_window)
-        self._main_window = main_window
+        super(InteractiveMatchingWidget, self).__init__(main_window, "Matching Attribute:")
 
-        self._layout = QVBoxLayout()
-        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.setLayout(self._layout)
+        self.nugget_list_widget = NuggetListWidget(self)
+        self.document_widget = DocumentWidget(self)
 
-        # title
-        self._header = QLabel("Matching Attribute '':")
-        self._header.setFont(HEADER_FONT)
-        self._layout.addWidget(self._header)
+        self.show_nugget_list_widget()
 
-        # content
-        self._nugget_list_widget = NuggetListWidget(self)
-        self._document_widget = DocumentWidget(self)
-        self._show_nugget_list_widget()
+    def enable_input(self):
+        self.nugget_list_widget.enable_input()
+        self.document_widget.enable_input()
+
+    def disable_input(self):
+        self.nugget_list_widget.disable_input()
+        self.document_widget.disable_input()
 
     def handle_feedback_request(self, feedback_request):
-        logger.info("Handle feedback request.")
-        self._show_nugget_list_widget()
-        self._header.setText(f"Matching Attribute '{feedback_request['attribute'].name}':")
-        self._nugget_list_widget.update_nuggets(feedback_request["nuggets"])
-
-    def give_feedback(self, feedback):
-        logger.info("Give feedback.")
-        self._main_window.give_feedback(feedback)
+        self.header.setText(f"Matching Attribute '{feedback_request['attribute'].name}':")
+        self.nugget_list_widget.update_nuggets(feedback_request["nuggets"])
+        self.show_nugget_list_widget()
 
     def get_document_feedback(self, nugget):
-        logger.info("Get document feedback.")
-        self._show_document_widget()
-        self._document_widget.update_document(nugget)
+        self.document_widget.update_document(nugget)
+        self.show_document_widget()
 
-    def _show_nugget_list_widget(self):
-        self._document_widget.hide()
-        self._nugget_list_widget.show()
-        self._layout.removeWidget(self._document_widget)
-        self._layout.addWidget(self._nugget_list_widget)
+    def show_nugget_list_widget(self):
+        self.document_widget.hide()
+        self.nugget_list_widget.show()
+        self.layout.removeWidget(self.document_widget)
+        self.layout.addWidget(self.nugget_list_widget)
 
-    def _show_document_widget(self):
-        self._nugget_list_widget.hide()
-        self._document_widget.show()
-        self._layout.removeWidget(self._nugget_list_widget)
-        self._layout.addWidget(self._document_widget)
+    def show_document_widget(self):
+        self.nugget_list_widget.hide()
+        self.document_widget.show()
+        self.layout.removeWidget(self.nugget_list_widget)
+        self.layout.addWidget(self.document_widget)
 
 
 class NuggetListWidget(QWidget):
     def __init__(self, interactive_matching_widget):
         super(NuggetListWidget, self).__init__(interactive_matching_widget)
-        self._interactive_matching_widget = interactive_matching_widget
+        self.interactive_matching_widget = interactive_matching_widget
 
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(10)
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(10)
 
         # top widget
-        self._top_widget = QWidget()
-        self._top_layout = QHBoxLayout(self._top_widget)
-        self._top_layout.setContentsMargins(0, 0, 0, 0)
-        self._top_layout.setSpacing(10)
-        self._layout.addWidget(self._top_widget)
+        self.top_widget = QWidget()
+        self.top_layout = QHBoxLayout(self.top_widget)
+        self.top_layout.setContentsMargins(0, 0, 0, 0)
+        self.top_layout.setSpacing(10)
+        self.layout.addWidget(self.top_widget)
 
-        self._description = QLabel("Below you see a list of guessed matches for you to confirm or correct.")
-        self._description.setFont(LABEL_FONT)
-        self._top_layout.addWidget(self._description)
+        self.description = QLabel("Below you see a list of guessed matches for you to confirm or correct.")
+        self.description.setFont(LABEL_FONT)
+        self.top_layout.addWidget(self.description)
 
-        self._stop_button = QPushButton("Continue With Next Attribute")
-        self._stop_button.setFont(BUTTON_FONT)
-        self._stop_button.clicked.connect(self._stop_button_clicked)
-        self._stop_button.setMaximumWidth(240)
-        self._top_layout.addWidget(self._stop_button)
+        self.stop_button = QPushButton("Continue With Next Attribute")
+        self.stop_button.setFont(BUTTON_FONT)
+        self.stop_button.clicked.connect(self._stop_button_clicked)
+        self.stop_button.setMaximumWidth(240)
+        self.top_layout.addWidget(self.stop_button)
 
         # nugget list
-        self._nugget_list_item_widgets = []
-        self._num_visible_nugget_list_item_widgets = 0
-        self._vertical_list = QWidget()
-        self._vertical_list_layout = QVBoxLayout(self._vertical_list)
-        self._vertical_list_layout.setContentsMargins(0, 0, 10, 0)
-        self._vertical_list_layout.setSpacing(12)
-        self._vertical_list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        self._scroll_area = QScrollArea()
-        self._scroll_area.setWidgetResizable(True)
-        self._scroll_area.setFrameStyle(0)
-        self._scroll_area.setWidget(self._vertical_list)
-        self._layout.addWidget(self._scroll_area)
+        self.nugget_list = CustomScrollableList(self, NuggetListItemWidget)
+        self.layout.addWidget(self.nugget_list)
 
     def update_nuggets(self, nuggets):
-        # make sure that there are enough nugget list item widgets
-        while len(nuggets) > len(self._nugget_list_item_widgets):
-            self._nugget_list_item_widgets.append(NuggetListItemWidget(self))
-
-        # make sure that the correct number of nugget list item widgets is shown
-        while len(nuggets) > self._num_visible_nugget_list_item_widgets:
-            widget = self._nugget_list_item_widgets[self._num_visible_nugget_list_item_widgets]
-            self._vertical_list_layout.addWidget(widget)
-            self._num_visible_nugget_list_item_widgets += 1
-        while len(nuggets) < self._num_visible_nugget_list_item_widgets:
-            widget = self._nugget_list_item_widgets[self._num_visible_nugget_list_item_widgets - 1]
-            self._vertical_list_layout.removeWidget(widget)
-            widget.setParent(None)
-            self._num_visible_nugget_list_item_widgets -= 1
-
-        # update the nugget list item widgets
         max_start_chars = max([nugget[CachedContextSentenceSignal]["start_char"] for nugget in nuggets])
-        for nugget, widget in zip(nuggets, self._nugget_list_item_widgets[:len(nuggets)]):
-            widget.update_nugget(nugget, max_start_chars)
+        self.nugget_list.update_item_list(nuggets, max_start_chars)
 
-    def give_feedback(self, feedback):
-        self._interactive_matching_widget.give_feedback(feedback)
+    def _stop_button_clicked(self):
+        self.interactive_matching_widget.main_window.give_feedback_task({"message": "stop-interactive-matching"})
 
-    def get_document_feedback(self, nugget):
-        self._interactive_matching_widget.get_document_feedback(nugget)
+    def enable_input(self):
+        self.stop_button.setEnabled(True)
+        self.nugget_list.enable_input()
 
-    def _stop_button_clicked(self, _):
-        self._interactive_matching_widget.give_feedback({"message": "stop-interactive-matching"})
+    def disable_input(self):
+        self.stop_button.setDisabled(True)
+        self.nugget_list.disable_input()
 
 
-class NuggetListItemWidget(QFrame):
+class NuggetListItemWidget(CustomScrollableListItem):
     def __init__(self, nugget_list_widget):
         super(NuggetListItemWidget, self).__init__(nugget_list_widget)
-        self._nugget_list_widget = nugget_list_widget
-        self._nugget = None
+        self.nugget_list_widget = nugget_list_widget
+        self.nugget = None
 
         self.setFixedHeight(40)
-
-        self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(20, 0, 10, 0)
-        self._layout.setSpacing(10)
         self.setStyleSheet("background-color: white")
 
-        self._info_label = QLabel()
-        self._info_label.setFont(CODE_FONT_BOLD)
-        self._layout.addWidget(self._info_label)
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(20, 0, 20, 0)
+        self.layout.setSpacing(10)
 
-        self._left_split_label = QLabel("|")
-        self._left_split_label.setFont(CODE_FONT_BOLD)
-        self._layout.addWidget(self._left_split_label)
+        self.info_label = QLabel()
+        self.info_label.setFont(CODE_FONT_BOLD)
+        self.layout.addWidget(self.info_label)
 
-        self._text_edit = QTextEdit()
-        self._text_edit.setReadOnly(True)
-        self._text_edit.setFrameStyle(0)
-        self._text_edit.setFont(CODE_FONT)
-        self._text_edit.setLineWrapMode(QTextEdit.LineWrapMode.FixedPixelWidth)
-        self._text_edit.setLineWrapColumnOrWidth(10000)
-        self._text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._text_edit.setFixedHeight(30)
-        self._text_edit.setText("")
-        self._layout.addWidget(self._text_edit)
+        self.left_split_label = QLabel("|")
+        self.left_split_label.setFont(CODE_FONT_BOLD)
+        self.layout.addWidget(self.left_split_label)
 
-        self._right_split_label = QLabel("|")
-        self._right_split_label.setFont(CODE_FONT_BOLD)
-        self._layout.addWidget(self._right_split_label)
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setFrameStyle(0)
+        self.text_edit.setFont(CODE_FONT)
+        self.text_edit.setLineWrapMode(QTextEdit.LineWrapMode.FixedPixelWidth)
+        self.text_edit.setLineWrapColumnOrWidth(10000)
+        self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.text_edit.setFixedHeight(30)
+        self.text_edit.setText("")
+        self.layout.addWidget(self.text_edit)
 
-        self._match_button = QPushButton()
-        self._match_button.setIcon(QIcon("aset_ui/resources/correct.svg"))
-        self._match_button.setFlat(True)
-        self._match_button.clicked.connect(self._match_button_clicked)
-        self._layout.addWidget(self._match_button)
+        self.right_split_label = QLabel("|")
+        self.right_split_label.setFont(CODE_FONT_BOLD)
+        self.layout.addWidget(self.right_split_label)
 
-        self._fix_button = QPushButton()
-        self._fix_button.setIcon(QIcon("aset_ui/resources/incorrect.svg"))
-        self._fix_button.setFlat(True)
-        self._fix_button.clicked.connect(self._fix_button_clicked)
-        self._layout.addWidget(self._fix_button)
+        self.match_button = QPushButton()
+        self.match_button.setIcon(QIcon("aset_ui/resources/correct.svg"))
+        self.match_button.setFlat(True)
+        self.match_button.clicked.connect(self._match_button_clicked)
+        self.layout.addWidget(self.match_button)
 
-    def update_nugget(self, nugget, max_start_chars):
-        self._nugget = nugget
+        self.fix_button = QPushButton()
+        self.fix_button.setIcon(QIcon("aset_ui/resources/incorrect.svg"))
+        self.fix_button.setFlat(True)
+        self.fix_button.clicked.connect(self._fix_button_clicked)
+        self.layout.addWidget(self.fix_button)
 
-        sentence = self._nugget[CachedContextSentenceSignal]["text"]
-        start_char = self._nugget[CachedContextSentenceSignal]["start_char"]
-        end_char = self._nugget[CachedContextSentenceSignal]["end_char"]
+    def update_item(self, item, params=None):
+        self.nugget = item
 
-        self._text_edit.setText("")
+        sentence = self.nugget[CachedContextSentenceSignal]["text"]
+        start_char = self.nugget[CachedContextSentenceSignal]["start_char"]
+        end_char = self.nugget[CachedContextSentenceSignal]["end_char"]
+
+        self.text_edit.setText("")
         formatted_text = (
-            f"{'&#160;' * (max_start_chars - start_char)}{sentence[:start_char]}"
+            f"{'&#160;' * (params - start_char)}{sentence[:start_char]}"
             f"<span style='background-color: #FFFF00'><b>{sentence[start_char:end_char]}</b></span>"
             f"{sentence[end_char:]}{'&#160;' * 50}"
         )
-        self._text_edit.textCursor().insertHtml(formatted_text)
+        self.text_edit.textCursor().insertHtml(formatted_text)
 
-        scroll_cursor = QTextCursor(self._text_edit.document())
-        scroll_cursor.setPosition(max_start_chars + 50)
-        self._text_edit.setTextCursor(scroll_cursor)
-        self._text_edit.ensureCursorVisible()
+        scroll_cursor = QTextCursor(self.text_edit.document())
+        scroll_cursor.setPosition(params + 50)
+        self.text_edit.setTextCursor(scroll_cursor)
+        self.text_edit.ensureCursorVisible()
 
-        self._info_label.setText(f"{str(round(nugget[CachedDistanceSignal], 2)).ljust(4)}")
+        self.info_label.setText(f"{str(round(self.nugget[CachedDistanceSignal], 2)).ljust(4)}")
 
-    def _match_button_clicked(self, _):
-        self._nugget_list_widget.give_feedback({"message": "is-match", "nugget": self._nugget})
+    def _match_button_clicked(self):
+        self.nugget_list_widget.interactive_matching_widget.main_window.give_feedback_task({
+            "message": "is-match",
+            "nugget": self.nugget
+        })
 
-    def _fix_button_clicked(self, _):
-        self._nugget_list_widget.get_document_feedback(self._nugget)
+    def _fix_button_clicked(self):
+        self.nugget_list_widget.interactive_matching_widget.get_document_feedback(self.nugget)
+
+    def enable_input(self):
+        self.match_button.setEnabled(True)
+        self.fix_button.setEnabled(True)
+
+    def disable_input(self):
+        self.match_button.setDisabled(True)
+        self.fix_button.setDisabled(True)
 
 
 class DocumentWidget(QWidget):
     def __init__(self, interactive_matching_widget):
         super(DocumentWidget, self).__init__(interactive_matching_widget)
-        self._interactive_matching_widget = interactive_matching_widget
+        self.interactive_matching_widget = interactive_matching_widget
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.setLayout(layout)
+        self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(10)
+        self.setLayout(self.layout)
 
-        self._document = None
-        self._current_nugget = None
-        self._base_formatted_text = ""
-        self._idx_mapper = {}
-        self._nuggets_in_order = []
+        self.document = None
+        self.current_nugget = None
+        self.base_formatted_text = ""
+        self.idx_mapper = {}
+        self.nuggets_in_order = []
 
-        self._text_edit = QTextEdit()
-        layout.addWidget(self._text_edit)
-        self._text_edit.setReadOnly(True)
-        self._text_edit.setFrameStyle(0)
-        self._text_edit.setFont(CODE_FONT)
-        self._text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._text_edit.setText("")
+        self.text_edit = QTextEdit()
+        self.layout.addWidget(self.text_edit)
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setFrameStyle(0)
+        self.text_edit.setFont(CODE_FONT)
+        self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.text_edit.setText("")
 
-        buttons_widget = QWidget()
-        layout.addWidget(buttons_widget)
-        buttons_widget_layout = QHBoxLayout()
-        buttons_widget.setLayout(buttons_widget_layout)
+        self.buttons_widget = QWidget()
+        self.buttons_widget_layout = QHBoxLayout(self.buttons_widget)
+        self.layout.addWidget(self.buttons_widget)
 
-        left_button = QPushButton("Skip Left")
-        left_button.setFont(BUTTON_FONT)
-        left_button.clicked.connect(self._left_button_clicked)
-        buttons_widget_layout.addWidget(left_button)
+        self.left_button = QPushButton("Skip Left")
+        self.left_button.setFont(BUTTON_FONT)
+        self.left_button.clicked.connect(self._left_button_clicked)
+        self.buttons_widget_layout.addWidget(self.left_button)
 
-        right_button = QPushButton("Skip Right")
-        right_button.setFont(BUTTON_FONT)
-        right_button.clicked.connect(self._right_button_clicked)
-        buttons_widget_layout.addWidget(right_button)
+        self.right_button = QPushButton("Skip Right")
+        self.right_button.setFont(BUTTON_FONT)
+        self.right_button.clicked.connect(self._right_button_clicked)
+        self.buttons_widget_layout.addWidget(self.right_button)
 
-        match_button = QPushButton("Confirm Match")
-        match_button.setFont(BUTTON_FONT)
-        match_button.clicked.connect(self._match_button_clicked)
-        buttons_widget_layout.addWidget(match_button)
+        self.match_button = QPushButton("Confirm Match")
+        self.match_button.setFont(BUTTON_FONT)
+        self.match_button.clicked.connect(self._match_button_clicked)
+        self.buttons_widget_layout.addWidget(self.match_button)
 
-        no_match_button = QPushButton("There Is No Match")
-        no_match_button.setFont(BUTTON_FONT)
-        no_match_button.clicked.connect(self._no_match_button_clicked)
-        buttons_widget_layout.addWidget(no_match_button)
+        self.no_match_button = QPushButton("There Is No Match")
+        self.no_match_button.setFont(BUTTON_FONT)
+        self.no_match_button.clicked.connect(self._no_match_button_clicked)
+        self.buttons_widget_layout.addWidget(self.no_match_button)
 
-        logger.debug("Initialized DocumentWidget.")
-
-    def _left_button_clicked(self, _):
-        idx = self._nuggets_in_order.index(self._current_nugget)
+    def _left_button_clicked(self):
+        idx = self.nuggets_in_order.index(self.current_nugget)
         if idx > 0:
-            self._current_nugget = self._nuggets_in_order[idx - 1]
+            self.current_nugget = self.nuggets_in_order[idx - 1]
             self._highlight_current_nugget()
 
-    def _right_button_clicked(self, _):
-        idx = self._nuggets_in_order.index(self._current_nugget)
-        if idx < len(self._nuggets_in_order) - 1:
-            self._current_nugget = self._nuggets_in_order[idx + 1]
+    def _right_button_clicked(self):
+        idx = self.nuggets_in_order.index(self.current_nugget)
+        if idx < len(self.nuggets_in_order) - 1:
+            self.current_nugget = self.nuggets_in_order[idx + 1]
             self._highlight_current_nugget()
 
-    def _match_button_clicked(self, _):
-        self._interactive_matching_widget.give_feedback({"message": "is-match", "nugget": self._current_nugget})
+    def _match_button_clicked(self):
+        self.interactive_matching_widget.main_window.give_feedback_task({
+            "message": "is-match",
+            "nugget": self.current_nugget
+        })
 
-    def _no_match_button_clicked(self, _):
-        self._interactive_matching_widget.give_feedback({
+    def _no_match_button_clicked(self):
+        self.interactive_matching_widget.main_window.give_feedback_task({
             "message": "no-match-in-document",
-            "nugget": self._current_nugget
+            "nugget": self.current_nugget
         })
 
     def _highlight_current_nugget(self):
-        mapped_start_char = self._idx_mapper[self._current_nugget.start_char]
-        mapped_end_char = self._idx_mapper[self._current_nugget.end_char]
+        mapped_start_char = self.idx_mapper[self.current_nugget.start_char]
+        mapped_end_char = self.idx_mapper[self.current_nugget.end_char]
         formatted_text = (
-            f"{self._base_formatted_text[:mapped_start_char]}"
+            f"{self.base_formatted_text[:mapped_start_char]}"
             f"<span style='background-color: #FFFF00'><b>"
-            f"{self._base_formatted_text[mapped_start_char:mapped_end_char]}</span></b>"
-            f"{self._base_formatted_text[mapped_end_char:]}"
+            f"{self.base_formatted_text[mapped_start_char:mapped_end_char]}</span></b>"
+            f"{self.base_formatted_text[mapped_end_char:]}"
         )
-        self._text_edit.setText("")
-        self._text_edit.textCursor().insertHtml(formatted_text)
+        self.text_edit.setText("")
+        self.text_edit.textCursor().insertHtml(formatted_text)
 
     def update_document(self, nugget):
-        self._document = nugget.document
-        self._current_nugget = nugget
-        self._nuggets_in_order = list(sorted(self._document.nuggets, key=lambda x: x.start_char))
+        self.document = nugget.document
+        self.current_nugget = nugget
+        self.nuggets_in_order = list(sorted(self.document.nuggets, key=lambda x: x.start_char))
 
-        if self._nuggets_in_order != []:
-            self._idx_mapper = {}
+        if self.nuggets_in_order != []:
+            self.idx_mapper = {}
             char_list = []
             end_chars = []
             next_start_char = 0
             next_nugget_idx = 0
-            for idx, char in enumerate(list(self._document.text)):
+            for idx, char in enumerate(list(self.document.text)):
                 if idx == next_start_char:
                     if end_chars == []:
                         char_list += list("<b>")
-                    end_chars.append(self._nuggets_in_order[next_nugget_idx].end_char)
+                    end_chars.append(self.nuggets_in_order[next_nugget_idx].end_char)
                     next_nugget_idx += 1
-                    if next_nugget_idx < len(self._nuggets_in_order):
-                        next_start_char = self._nuggets_in_order[next_nugget_idx].start_char
+                    if next_nugget_idx < len(self.nuggets_in_order):
+                        next_start_char = self.nuggets_in_order[next_nugget_idx].start_char
                     else:
                         next_start_char = -1
                 while idx in end_chars:
                     end_chars.remove(idx)
                 if end_chars == []:
                     char_list += list("</b>")
-                self._idx_mapper[idx] = len(char_list)
+                self.idx_mapper[idx] = len(char_list)
                 char_list.append(char)
-            self._base_formatted_text = "".join(char_list)
+            self.base_formatted_text = "".join(char_list)
         else:
-            self._idx_mapper = {}
-            for idx in range(len(self._document.text)):
-                self._idx_mapper[idx] = idx
-            self._base_formatted_text = ""
+            self.idx_mapper = {}
+            for idx in range(len(self.document.text)):
+                self.idx_mapper[idx] = idx
+            self.base_formatted_text = ""
 
         self._highlight_current_nugget()
 
-        scroll_cursor = QTextCursor(self._text_edit.document())
+        scroll_cursor = QTextCursor(self.text_edit.document())
         scroll_cursor.setPosition(nugget.start_char)
-        self._text_edit.setTextCursor(scroll_cursor)
-        self._text_edit.ensureCursorVisible()
+        self.text_edit.setTextCursor(scroll_cursor)
+        self.text_edit.ensureCursorVisible()
+
+    def enable_input(self):
+        self.left_button.setEnabled(True)
+        self.right_button.setEnabled(True)
+        self.match_button.setEnabled(True)
+        self.no_match_button.setEnabled(True)
+
+    def disable_input(self):
+        self.left_button.setDisabled(True)
+        self.right_button.setDisabled(True)
+        self.match_button.setDisabled(True)
+        self.no_match_button.setDisabled(True)

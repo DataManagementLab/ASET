@@ -106,6 +106,24 @@ class ASETAPI(QObject):
             self.error.emit(str(e))
 
     @pyqtSlot(str, ASETDocumentBase)
+    def forget_matches_for_attribute(self, name, document_base):
+        logger.debug("Called slot 'forget_matches_for_attribute'.")
+        self.status.emit("Forgetting matches...", -1)
+        try:
+            if name in [attribute.name for attribute in document_base.attributes]:
+                for document in document_base.documents:
+                    if name in document.attribute_mappings.keys():
+                        del document.attribute_mappings[name]
+                self.document_base_to_ui.emit(document_base)
+                self.finished.emit("Finished!")
+            else:
+                logger.error("Attribute name does not exist!")
+                self.error.emit("Attribute name does not exist!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(str, ASETDocumentBase)
     def remove_attribute(self, name, document_base):
         logger.debug("Called slot 'remove_attribute'.")
         self.status.emit("Removing attribute...", -1)
@@ -167,11 +185,20 @@ class ASETAPI(QObject):
         logger.debug("Called slot 'save_table_to_csv'.")
         self.status.emit("Saving table to CSV...", -1)
         try:
-            table_dict = document_base.to_table_dict("text")  # TODO: currently stores the nuggets' texts
+            # TODO: currently stores the text of the first matching nugget (if there is one)
+            table_dict = document_base.to_table_dict("text")
             headers = list(table_dict.keys())
             rows = []
             for ix in range(len(table_dict[headers[0]])):
-                rows.append([table_dict[header][ix] for header in headers])
+                row = []
+                for header in headers:
+                    if header == "document-name":
+                        row.append(table_dict[header][ix])
+                    elif table_dict[header][ix] == []:
+                        row.append(None)
+                    else:
+                        row.append(table_dict[header][ix][0])
+                rows.append(row)
             with open(path, "w", encoding="utf-8", newline="") as file:
                 writer = csv.writer(file, delimiter=",", quotechar='"', quoting=csv.QUOTE_ALL)
                 writer.writerow(headers)
@@ -185,36 +212,13 @@ class ASETAPI(QObject):
             self.error.emit(str(e))
 
     @pyqtSlot(ASETDocumentBase)
-    def forget_attribute_mappings(self, document_base):
-        logger.debug("Called slot 'forget_attribute_mappings'.")
-        self.status.emit("Forgetting attribute mappings...", -1)
+    def forget_matches(self, document_base):
+        logger.debug("Called slot 'forget_matches'.")
+        self.status.emit("Forgetting matches...", -1)
         try:
             for document in document_base.documents:
                 document.attribute_mappings.clear()
             self.document_base_to_ui.emit(document_base)
-            self.finished.emit("Finished!")
-        except Exception as e:
-            logger.error(str(e))
-            self.error.emit(str(e))
-
-    @pyqtSlot()
-    def load_default_preprocessing_phase(self):
-        logger.debug("Called slot 'load_default_preprocessing_phase'.")
-        self.status.emit("Loading default preprocessing phase...", -1)
-        try:
-            preprocessing_phase = PreprocessingPhase(
-                extractors=[
-                    StanzaNERExtractor()
-                ],
-                normalizers=[],
-                embedders=[
-                    FastTextLabelEmbedder("FastTextEmbedding100000", True, [" ", "_"]),
-                    SBERTTextEmbedder("SBERTBertLargeNliMeanTokensResource"),
-                    BERTContextSentenceEmbedder("BertLargeCasedResource"),
-                    RelativePositionEmbedder()
-                ]
-            )
-            self.preprocessing_phase_to_ui.emit(preprocessing_phase)
             self.finished.emit("Finished!")
         except Exception as e:
             logger.error(str(e))
@@ -250,30 +254,6 @@ class ASETAPI(QObject):
         except FileNotFoundError:
             logger.error("Directory does not exist!")
             self.error.emit("Directory does not exist!")
-        except Exception as e:
-            logger.error(str(e))
-            self.error.emit(str(e))
-
-    @pyqtSlot()
-    def load_default_matching_phase(self):
-        logger.debug("Called slot 'load_default_matching_phase'.")
-        self.status.emit("Loading default matching phase...", -1)
-        try:
-            matching_phase = RankingBasedMatchingPhase(
-                distance=SignalsMeanDistance(
-                    signal_strings=[
-                        "LabelEmbeddingSignal",
-                        "TextEmbeddingSignal",
-                        "ContextSentenceEmbeddingSignal",
-                        "RelativePositionSignal"
-                    ]
-                ),
-                max_num_feedback=25,
-                len_ranked_list=10,
-                max_distance=0.6
-            )
-            self.matching_phase_to_ui.emit(matching_phase)
-            self.finished.emit("Finished!")
         except Exception as e:
             logger.error(str(e))
             self.error.emit(str(e))
@@ -370,6 +350,94 @@ class ASETAPI(QObject):
         except FileNotFoundError:
             logger.error("Directory does not exist!")
             self.error.emit("Directory does not exist!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(ASETDocumentBase, Statistics)
+    def load_and_run_default_preprocessing_phase(self, document_base, statistics):
+        logger.debug("Called slot 'load_and_run_default_preprocessing_phase'.")
+        try:
+            # load default preprocessing phase
+            self.status.emit("Loading default preprocessing phase...", -1)
+
+            preprocessing_phase = PreprocessingPhase(
+                extractors=[
+                    StanzaNERExtractor()
+                ],
+                normalizers=[],
+                embedders=[
+                    FastTextLabelEmbedder("FastTextEmbedding100000", True, [" ", "_"]),
+                    SBERTTextEmbedder("SBERTBertLargeNliMeanTokensResource"),
+                    BERTContextSentenceEmbedder("BertLargeCasedResource"),
+                    RelativePositionEmbedder()
+                ]
+            )
+
+            # run preprocessing phase
+            self.status.emit("Running preprocessing phase...", -1)
+
+            def status_callback_fn(message, progress):
+                self.status.emit(message, progress)
+
+            status_fn = StatusFunction(status_callback_fn)
+
+            preprocessing_phase(document_base, status_fn, statistics)
+
+            self.preprocessing_phase_to_ui.emit(preprocessing_phase)
+            self.document_base_to_ui.emit(document_base)
+            self.statistics_to_ui.emit(statistics)
+            self.finished.emit("Finished!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(ASETDocumentBase, Statistics)
+    def load_and_run_default_matching_phase(self, document_base, statistics):
+        logger.debug("Called slot 'load_and_run_default_matching_phase'.")
+        try:
+            # load default matching phase
+            self.status.emit("Loading default matching phase...", -1)
+
+            matching_phase = RankingBasedMatchingPhase(
+                distance=SignalsMeanDistance(
+                    signal_strings=[
+                        "LabelEmbeddingSignal",
+                        "TextEmbeddingSignal",
+                        "ContextSentenceEmbeddingSignal",
+                        "RelativePositionSignal"
+                    ]
+                ),
+                max_num_feedback=25,
+                len_ranked_list=10,
+                max_distance=0.6
+            )
+
+            # run matching phase
+            self.status.emit("Running matching phase...", -1)
+
+            def status_callback_fn(message, progress):
+                self.status.emit(message, progress)
+
+            status_fn = StatusFunction(status_callback_fn)
+
+            def feedback_fn(feedback_request):
+                self.feedback_request_to_ui.emit(feedback_request)
+
+                self.feedback_mutex.lock()
+                try:
+                    self.feedback_cond.wait(self.feedback_mutex)
+                finally:
+                    self.feedback_mutex.unlock()
+
+                return self.feedback
+
+            matching_phase(document_base, feedback_fn, status_fn, statistics)
+
+            self.matching_phase_to_ui.emit(matching_phase)
+            self.document_base_to_ui.emit(document_base)
+            self.statistics_to_ui.emit(statistics)
+            self.finished.emit("Finished!")
         except Exception as e:
             logger.error(str(e))
             self.error.emit(str(e))

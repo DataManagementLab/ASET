@@ -2,7 +2,7 @@ import logging
 import sys
 
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QStyleFactory
+from PyQt6.QtWidgets import QApplication
 
 from aset.resources import ResourceManager
 from aset_ui.main_window import MainWindow
@@ -17,13 +17,6 @@ if __name__ == "__main__":
         # set up PyQt application
         app = QApplication(sys.argv)
         app.setWindowIcon(QIcon("aset_ui/resources/logo.png"))
-
-        preferred_style = "Windows"
-        if preferred_style in QStyleFactory.keys():
-            app.setStyle(preferred_style)
-            logger.info(f"Using preferred style '{preferred_style}'.")
-        else:
-            logger.info(f"Using default style '{app.style().objectName()}'.")
 
         window = MainWindow()
 
