@@ -1,15 +1,11 @@
 # ASET: Ad-hoc Structured Exploration of Text Collections
 
-![ASET Pipeline](aset-pipeline.png)
+![ASET Overview](aset-overview.png)
 
 ASET extracts information nuggets from a collection of textual documents and matches them to a list of user-specified
 attributes.
 
-Run `main.py` to execute ASET on one of the evaluation datasets.
-
-Alternatively, you may start the GUI by running `main_ui.py`.
-
-`experiments/` contains Python scripts to run evaluation experiments and generate plots.
+Run `main.py` to start the ASET GUI.
 
 ## Data Sets
 
@@ -17,8 +13,9 @@ The evaluation scripts use multiple data sets to evaluate the system.
 
 * The **aviation data set** consists of executive summaries from the NTSB Aviation Accident Reports.
 * The **corona data set** consists of summaries of the RKI's daily reports about the Covid-19 situation in Germany.
-* The **countries data set** consists of articles about sovereign states from the T-Rex dataset
-* The **nobel data set** consists of articles about nobel price winners from the T-Rex dataset
+* The **countries data set** consists of articles about sovereign states from the T-REx dataset
+* The **nobel data set** consists of articles about nobel price winners from the T-REx dataset
+* The **skyscrapers data aset** consists of articles about skyscrapers from the T-REx dataset
 
 T-Rex dataset: [https://hadyelsahar.github.io/t-rex/](https://hadyelsahar.github.io/t-rex/)
 

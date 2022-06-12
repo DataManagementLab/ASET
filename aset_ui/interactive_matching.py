@@ -2,11 +2,11 @@ import logging
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QTextCursor
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget, QMessageBox
 
 from aset.data.signals import CachedContextSentenceSignal, CachedDistanceSignal
 from aset_ui.common import BUTTON_FONT, CODE_FONT, CODE_FONT_BOLD, LABEL_FONT, MainWindowContent, \
-    CustomScrollableList, CustomScrollableListItem
+    CustomScrollableList, CustomScrollableListItem, WHITE, LIGHT_RED, LIGHT_YELLOW, YELLOW
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class InteractiveMatchingWidget(MainWindowContent):
 
     def handle_feedback_request(self, feedback_request):
         self.header.setText(f"Matching Attribute '{feedback_request['attribute'].name}':")
-        self.nugget_list_widget.update_nuggets(feedback_request["nuggets"])
+        self.nugget_list_widget.update_nuggets(feedback_request)
         self.show_nugget_list_widget()
 
     def get_document_feedback(self, nugget):
@@ -66,7 +66,7 @@ class NuggetListWidget(QWidget):
         self.top_layout.setSpacing(10)
         self.layout.addWidget(self.top_widget)
 
-        self.description = QLabel("Below you see a list of guessed matches for you to confirm or correct.")
+        self.description = QLabel("Below you see a list of guessed matches for you to confirm or fix.")
         self.description.setFont(LABEL_FONT)
         self.top_layout.addWidget(self.description)
 
@@ -80,9 +80,13 @@ class NuggetListWidget(QWidget):
         self.nugget_list = CustomScrollableList(self, NuggetListItemWidget)
         self.layout.addWidget(self.nugget_list)
 
-    def update_nuggets(self, nuggets):
-        max_start_chars = max([nugget[CachedContextSentenceSignal]["start_char"] for nugget in nuggets])
-        self.nugget_list.update_item_list(nuggets, max_start_chars)
+    def update_nuggets(self, feedback_request):
+        nuggets = feedback_request["nuggets"]
+        params = {
+            "max_start_chars": max([nugget[CachedContextSentenceSignal]["start_char"] for nugget in nuggets]),
+            "max_distance": feedback_request["max-distance"]
+        }
+        self.nugget_list.update_item_list(nuggets, params)
 
     def _stop_button_clicked(self):
         self.interactive_matching_widget.main_window.give_feedback_task({"message": "stop-interactive-matching"})
@@ -102,16 +106,18 @@ class NuggetListItemWidget(CustomScrollableListItem):
         self.nugget_list_widget = nugget_list_widget
         self.nugget = None
 
-        self.setFixedHeight(40)
-        self.setStyleSheet("background-color: white")
+        self.setFixedHeight(45)
+        self.setStyleSheet(f"background-color: {WHITE}")
 
         self.layout = QHBoxLayout(self)
         self.layout.setContentsMargins(20, 0, 20, 0)
         self.layout.setSpacing(10)
 
-        self.info_label = QLabel()
-        self.info_label.setFont(CODE_FONT_BOLD)
-        self.layout.addWidget(self.info_label)
+        self.info_button = QPushButton()
+        self.info_button.setFlat(True)
+        self.info_button.setFont(CODE_FONT_BOLD)
+        self.info_button.clicked.connect(self._info_button_clicked)
+        self.layout.addWidget(self.info_button)
 
         self.left_split_label = QLabel("|")
         self.left_split_label.setFont(CODE_FONT_BOLD)
@@ -125,7 +131,7 @@ class NuggetListItemWidget(CustomScrollableListItem):
         self.text_edit.setLineWrapColumnOrWidth(10000)
         self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_edit.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.text_edit.setFixedHeight(30)
+        self.text_edit.setFixedHeight(27)
         self.text_edit.setText("")
         self.layout.addWidget(self.text_edit)
 
@@ -140,7 +146,7 @@ class NuggetListItemWidget(CustomScrollableListItem):
         self.layout.addWidget(self.match_button)
 
         self.fix_button = QPushButton()
-        self.fix_button.setIcon(QIcon("aset_ui/resources/incorrect.svg"))
+        self.fix_button.setIcon(QIcon("aset_ui/resources/magnifier.svg"))
         self.fix_button.setFlat(True)
         self.fix_button.clicked.connect(self._fix_button_clicked)
         self.layout.addWidget(self.fix_button)
@@ -148,24 +154,32 @@ class NuggetListItemWidget(CustomScrollableListItem):
     def update_item(self, item, params=None):
         self.nugget = item
 
+        max_start_chars = params["max_start_chars"]
+        max_distance = params["max_distance"]
+
+        if max_distance < self.nugget[CachedDistanceSignal]:
+            self.setStyleSheet(f"background-color: {LIGHT_RED}")
+        else:
+            self.setStyleSheet(f"background-color: {WHITE}")
+
         sentence = self.nugget[CachedContextSentenceSignal]["text"]
         start_char = self.nugget[CachedContextSentenceSignal]["start_char"]
         end_char = self.nugget[CachedContextSentenceSignal]["end_char"]
 
         self.text_edit.setText("")
         formatted_text = (
-            f"{'&#160;' * (params - start_char)}{sentence[:start_char]}"
-            f"<span style='background-color: #FFFF00'><b>{sentence[start_char:end_char]}</b></span>"
+            f"{'&#160;' * (max_start_chars - start_char)}{sentence[:start_char]}"
+            f"<span style='background-color: {YELLOW}'><b>{sentence[start_char:end_char]}</b></span>"
             f"{sentence[end_char:]}{'&#160;' * 50}"
         )
         self.text_edit.textCursor().insertHtml(formatted_text)
 
         scroll_cursor = QTextCursor(self.text_edit.document())
-        scroll_cursor.setPosition(params + 50)
+        scroll_cursor.setPosition(max_start_chars + 50)
         self.text_edit.setTextCursor(scroll_cursor)
         self.text_edit.ensureCursorVisible()
 
-        self.info_label.setText(f"{str(round(self.nugget[CachedDistanceSignal], 2)).ljust(4)}")
+        self.info_button.setText(f"{str(round(self.nugget[CachedDistanceSignal], 2)).ljust(4)}")
 
     def _match_button_clicked(self):
         self.nugget_list_widget.interactive_matching_widget.main_window.give_feedback_task({
@@ -175,6 +189,23 @@ class NuggetListItemWidget(CustomScrollableListItem):
 
     def _fix_button_clicked(self):
         self.nugget_list_widget.interactive_matching_widget.get_document_feedback(self.nugget)
+
+    def _info_button_clicked(self):
+        lines = []
+        lines.append("Signal values:")
+        lines.append("")
+        for key, value in self.nugget.signals.items():
+            lines.append(f"- {key}: '{str(value)[:40]}'")
+
+        lines.append("")
+        lines.append("All nuggets in document:")
+        lines.append("")
+        nuggets = self.nugget.document.nuggets
+        nuggets = list(sorted(nuggets, key=lambda x: x[CachedDistanceSignal]))
+        for nugget in nuggets:
+            lines.append(f"- '{nugget.text}' ({nugget[CachedDistanceSignal]})")
+
+        QMessageBox.information(self, "Nugget Information", "\n".join(lines))
 
     def enable_input(self):
         self.match_button.setEnabled(True)
@@ -200,6 +231,7 @@ class DocumentWidget(QWidget):
         self.base_formatted_text = ""
         self.idx_mapper = {}
         self.nuggets_in_order = []
+        self.nuggets_sorted_by_distance = []
 
         self.text_edit = QTextEdit()
         self.layout.addWidget(self.text_edit)
@@ -209,8 +241,13 @@ class DocumentWidget(QWidget):
         self.text_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.text_edit.setText("")
 
+        self.suggestion_list = CustomScrollableList(self, SuggestionListItemWidget, orientation="horizontal")
+        self.suggestion_list.setFixedHeight(60)
+        self.layout.addWidget(self.suggestion_list)
+
         self.buttons_widget = QWidget()
         self.buttons_widget_layout = QHBoxLayout(self.buttons_widget)
+        self.buttons_widget_layout.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(self.buttons_widget)
 
         self.left_button = QPushButton("Skip Left")
@@ -238,12 +275,14 @@ class DocumentWidget(QWidget):
         if idx > 0:
             self.current_nugget = self.nuggets_in_order[idx - 1]
             self._highlight_current_nugget()
+            self.suggestion_list.update_item_list(self.nuggets_sorted_by_distance, self.current_nugget)
 
     def _right_button_clicked(self):
         idx = self.nuggets_in_order.index(self.current_nugget)
         if idx < len(self.nuggets_in_order) - 1:
             self.current_nugget = self.nuggets_in_order[idx + 1]
             self._highlight_current_nugget()
+            self.suggestion_list.update_item_list(self.nuggets_sorted_by_distance, self.current_nugget)
 
     def _match_button_clicked(self):
         self.interactive_matching_widget.main_window.give_feedback_task({
@@ -262,7 +301,7 @@ class DocumentWidget(QWidget):
         mapped_end_char = self.idx_mapper[self.current_nugget.end_char]
         formatted_text = (
             f"{self.base_formatted_text[:mapped_start_char]}"
-            f"<span style='background-color: #FFFF00'><b>"
+            f"<span style='background-color: {YELLOW}'><b>"
             f"{self.base_formatted_text[mapped_start_char:mapped_end_char]}</span></b>"
             f"{self.base_formatted_text[mapped_end_char:]}"
         )
@@ -272,18 +311,19 @@ class DocumentWidget(QWidget):
     def update_document(self, nugget):
         self.document = nugget.document
         self.current_nugget = nugget
+        self.nuggets_sorted_by_distance = list(sorted(self.document.nuggets, key=lambda x: x[CachedDistanceSignal]))
         self.nuggets_in_order = list(sorted(self.document.nuggets, key=lambda x: x.start_char))
 
         if self.nuggets_in_order != []:
             self.idx_mapper = {}
             char_list = []
             end_chars = []
-            next_start_char = 0
+            next_start_char = self.nuggets_in_order[0].start_char
             next_nugget_idx = 0
             for idx, char in enumerate(list(self.document.text)):
                 if idx == next_start_char:
-                    if end_chars == []:
-                        char_list += list("<b>")
+                    char_list += list("</span></b>")
+                    char_list += list(f"<span style='background-color: {LIGHT_YELLOW}'><b>")
                     end_chars.append(self.nuggets_in_order[next_nugget_idx].end_char)
                     next_nugget_idx += 1
                     if next_nugget_idx < len(self.nuggets_in_order):
@@ -293,7 +333,7 @@ class DocumentWidget(QWidget):
                 while idx in end_chars:
                     end_chars.remove(idx)
                 if end_chars == []:
-                    char_list += list("</b>")
+                    char_list += list("</span></b>")
                 self.idx_mapper[idx] = len(char_list)
                 char_list.append(char)
             self.base_formatted_text = "".join(char_list)
@@ -310,14 +350,67 @@ class DocumentWidget(QWidget):
         self.text_edit.setTextCursor(scroll_cursor)
         self.text_edit.ensureCursorVisible()
 
+        self.suggestion_list.update_item_list(self.nuggets_sorted_by_distance, self.current_nugget)
+
     def enable_input(self):
         self.left_button.setEnabled(True)
         self.right_button.setEnabled(True)
         self.match_button.setEnabled(True)
         self.no_match_button.setEnabled(True)
+        self.suggestion_list.enable_input()
 
     def disable_input(self):
         self.left_button.setDisabled(True)
         self.right_button.setDisabled(True)
         self.match_button.setDisabled(True)
         self.no_match_button.setDisabled(True)
+        self.suggestion_list.disable_input()
+
+
+class SuggestionListItemWidget(CustomScrollableListItem):
+
+    def __init__(self, suggestion_list_widget):
+        super(SuggestionListItemWidget, self).__init__(suggestion_list_widget)
+        self.suggestion_list_widget = suggestion_list_widget
+        self.nugget = None
+
+        self.setFixedHeight(30)
+        self.setStyleSheet(f"background-color: {WHITE}")
+
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(20, 0, 20, 0)
+        self.layout.setSpacing(10)
+
+        self.text_label = QLabel()
+        self.text_label.setFont(CODE_FONT_BOLD)
+        self.layout.addWidget(self.text_label)
+
+        self.split_label = QLabel("|")
+        self.split_label.setFont(CODE_FONT_BOLD)
+        self.layout.addWidget(self.split_label)
+
+        self.choose_button = QPushButton()
+        self.choose_button.setIcon(QIcon("aset_ui/resources/correct.svg"))
+        self.choose_button.setFlat(True)
+        self.choose_button.clicked.connect(self._choose_button_clicked)
+        self.layout.addWidget(self.choose_button)
+
+    def update_item(self, item, params=None):
+        self.nugget = item
+        self.text_label.setText(self.nugget.text)
+        if self.nugget == params:
+            self.setStyleSheet(f"background-color: {YELLOW}")
+        else:
+            self.setStyleSheet(f"background-color: {LIGHT_YELLOW}")
+
+    def _choose_button_clicked(self):
+        self.suggestion_list_widget.interactive_matching_widget.main_window.give_feedback_task({
+            "message": "is-match",
+            "nugget": self.nugget
+        })
+
+    def enable_input(self):
+        self.choose_button.setEnabled(True)
+
+    def disable_input(self):
+        self.choose_button.setDisabled(True)

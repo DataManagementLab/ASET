@@ -6,7 +6,23 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Statistics:
+    """
+    Statistics to collect information during execution.
+
+    A statistics object allows the pipeline and its pipeline elements to record information during their execution. The
+    statistics object is provided to the pipeline or pipeline element when applying it to the document base.
+
+    In contrast to a basic Python dictionary, the statistics object can easily be configured as to whether it actually
+    should record any information. This unclutters the code required in the pipeline / pipeline element implementation.
+    Furthermore, it can be used as a counter for integer and float values without requiring initialization.
+    """
+
     def __init__(self, do_collect: bool = True) -> None:
+        """
+        Initialize the Statistics.
+
+        :param do_collect: whether to actually collect statistics
+        """
         super(Statistics, self).__init__()
         self._do_collect: bool = do_collect
         if self._do_collect:
@@ -45,6 +61,10 @@ class Statistics:
     def __isub__(self, other: Union[int, float]) -> Union[int, float]:
         return -other
 
+    def add(self, other):
+        # dummy method in case this is a no-collect statistics object that replaces a set
+        pass
+
     def all_keys(self) -> List[str]:
         return list(self._entries.keys())
 
@@ -57,6 +77,8 @@ class Statistics:
             for key, entry in self._entries.items():
                 if isinstance(entry, Statistics):
                     d[key] = entry.to_serializable()
+                elif isinstance(entry, set):
+                    d[key] = list(entry)
                 else:
                     d[key] = entry
             return d

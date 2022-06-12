@@ -30,6 +30,11 @@ class DocumentBaseViewerWidget(MainWindowContent):
         )
         self.controls_layout.addWidget(self.load_and_run_default_preprocessing_phase_button)
 
+        self.enter_query_button = QPushButton("Enter Query to Derive Attributes")
+        self.enter_query_button.setFont(BUTTON_FONT)
+        self.enter_query_button.clicked.connect(self.main_window.enter_query_task)
+        self.controls_layout.addWidget(self.enter_query_button)
+
         self.load_and_run_default_matching_phase_button = QPushButton("Match the Nuggets to the Attributes")
         self.load_and_run_default_matching_phase_button.setFont(BUTTON_FONT)
         self.load_and_run_default_matching_phase_button.clicked.connect(
@@ -78,6 +83,7 @@ class DocumentBaseViewerWidget(MainWindowContent):
 
         if self.main_window.document_base is not None:
             self.load_and_run_default_preprocessing_phase_button.setEnabled(True)
+            self.enter_query_button.setEnabled(True)
             self.load_and_run_default_matching_phase_button.setEnabled(True)
             self.save_table_button.setEnabled(True)
             self.add_attribute_button.setEnabled(True)
@@ -86,6 +92,7 @@ class DocumentBaseViewerWidget(MainWindowContent):
     def disable_input(self):
         self.create_document_base_button.setDisabled(True)
         self.load_and_run_default_preprocessing_phase_button.setDisabled(True)
+        self.enter_query_button.setDisabled(True)
         self.load_and_run_default_matching_phase_button.setDisabled(True)
         self.save_table_button.setDisabled(True)
         self.add_attribute_button.setDisabled(True)

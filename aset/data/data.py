@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional, Type, Union
 
 import bson
 
-from aset.data.annotations import BaseAnnotation
-from aset.data.signals import BaseSignal
+from aset.data import signals
+from aset.data.signals import BaseSignal, ValueSignal
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -18,16 +18,16 @@ class ASETNugget:
     The information piece corresponds with a span of text in the document (its provenance). Since the ASETNugget does
     not store the actual text but rather the indices of the span in the document, it only functions together with the
     document.
+
+    ASETNuggets can have signals. Signals are values that can be set for a given nugget, but do not necessarily need to
+    be set for every nugget.
     """
 
     def __init__(
             self,
             document: "ASETDocument",
             start_char: int,
-            end_char: int,
-            extractor_str: Optional[str],
-            type_str: Optional[str],
-            value: Optional[str]
+            end_char: int
     ) -> None:
         """
         Initialize the ASETNugget.
@@ -35,17 +35,10 @@ class ASETNugget:
         :param document: document from which it has been obtained
         :param start_char: index of the first character of the span (inclusive)
         :param end_char: index of the first character after the span (exclusive)
-        :param extractor_str: identifier of the extractor that obtained this nugget
-        :param type_str: identifier of the nugget's data type
-        :param value: structured value of the nugget
         """
         self._document: "ASETDocument" = document
         self._start_char: int = start_char
         self._end_char: int = end_char
-
-        self._extractor_str: Optional[str] = extractor_str
-        self._type_str: Optional[str] = type_str
-        self._value: Optional[str] = value
 
         self._signals: Dict[str, BaseSignal] = {}
 
@@ -65,9 +58,6 @@ class ASETNugget:
                 and self._document.name == other._document.name
                 and self._start_char == other._start_char
                 and self._end_char == other._end_char
-                and self.extractor_str == other.extractor_str
-                and self._type_str == other._type_str
-                and self._value == other._value
                 and self._signals == other._signals
         )
 
@@ -89,52 +79,45 @@ class ASETNugget:
     @functools.cached_property
     def text(self) -> str:
         """Actual text of the span."""
-        return self._document.text[self._start_char: self._end_char]
-
-    @property
-    def extractor_str(self) -> Optional[str]:
-        """Identifier of the extractor that obtained this nugget."""
-        return self._extractor_str
-
-    @property
-    def type_str(self) -> Optional[str]:
-        """Identifier of the nugget's data type."""
-        return self._type_str
-
-    @property
-    def value(self) -> Optional[str]:
-        """Structured value of the nugget."""
-        return self._value
+        return self._document.text[self._start_char:self._end_char]
 
     @property
     def signals(self) -> Dict[str, BaseSignal]:
-        """Signal values associated with the nugget."""
+        """Signals associated with the nugget."""
         return self._signals
 
     def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
-        if isinstance(item, str):
-            signal_str: str = item
-        else:
-            signal_str: str = item.signal_str
+        """
+        Get the nugget's signal values.
 
-        if signal_str not in self._signals.keys():
-            assert False, f"No value for signal '{signal_str}'!"
-        return self._signals[signal_str].value
+        :param item: signal class or signal identifier
+        :return: value of the signal
+        """
+        if isinstance(item, str):
+            signal_identifier: str = item
+        else:
+            signal_identifier: str = item.identifier
+
+        return self._signals[signal_identifier].value
 
     def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
-        if isinstance(key, str):
-            signal_str: str = key
-        else:
-            signal_str: str = key.signal_str
+        """
+        Set the nugget's signal values.
 
-        if signal_str not in self._signals.keys():
-            if not isinstance(value, BaseSignal):
-                assert False, f"Signal '{signal_str}' has not been initialized yet!"
-            self._signals[signal_str] = value
-        if isinstance(value, BaseSignal):
-            self._signals[signal_str] = value
+        :param key: signal class or signal identifier
+        :param value: signal or signal value
+        """
+        if isinstance(key, str):
+            signal_identifier: str = key
         else:
-            self._signals[signal_str].value = value
+            signal_identifier: str = key.identifier
+
+        if isinstance(value, BaseSignal):
+            self._signals[signal_identifier] = value
+        elif signal_identifier in self._signals.keys():
+            self._signals[signal_identifier].value = value
+        else:  # signal not already set and value is not a signal object ==> get signal class by id and create object
+            self._signals[signal_identifier] = signals.SIGNALS[signal_identifier](value)
 
 
 class ASETAttribute:
@@ -143,13 +126,16 @@ class ASETAttribute:
 
     An ASETAttribute is a class of information that is obtained from the documents. Each ASETDocument may store mappings
     that populate the attribute with ASETNuggets from the document.
+
+    ASETAttributes can have signals. Signals are values that can be set for a given attribute, but do not necessarily
+    need to be set for every attribute.
     """
 
     def __init__(self, name: str) -> None:
         """
         Initialize the ASETAttribute.
 
-        :param name: name of the attribute (must be unique)
+        :param name: name of the attribute (must be unique in the document base)
         """
         self._name: str = name
 
@@ -174,33 +160,41 @@ class ASETAttribute:
 
     @property
     def signals(self) -> Dict[str, BaseSignal]:
-        """Signal values associated with the attribute."""
+        """Signals associated with the attribute."""
         return self._signals
 
     def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
-        if isinstance(item, str):
-            signal_str: str = item
-        else:
-            signal_str: str = item.signal_str
+        """
+        Get the attribute's signal values.
 
-        if signal_str not in self._signals.keys():
-            assert False, f"No value for signal '{signal_str}'!"
-        return self._signals[signal_str].value
+        :param item: signal class or signal identifier
+        :return: value of the signal
+        """
+        if isinstance(item, str):
+            signal_identifier: str = item
+        else:
+            signal_identifier: str = item.identifier
+
+        return self._signals[signal_identifier].value
 
     def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
-        if isinstance(key, str):
-            signal_str: str = key
-        else:
-            signal_str: str = key.signal_str
+        """
+        Set the attribute's signal values.
 
-        if signal_str not in self._signals.keys():
-            if not isinstance(value, BaseSignal):
-                assert False, f"Signal '{signal_str}' has not been initialized yet!"
-            self._signals[signal_str] = value
-        if isinstance(value, BaseSignal):
-            self._signals[signal_str] = value
+        :param key: signal class or signal identifier
+        :param value: signal or signal value
+        """
+        if isinstance(key, str):
+            signal_identifier: str = key
         else:
-            self._signals[signal_str].value = value
+            signal_identifier: str = key.identifier
+
+        if isinstance(value, BaseSignal):
+            self._signals[signal_identifier] = value
+        elif signal_identifier in self._signals.keys():
+            self._signals[signal_identifier].value = value
+        else:  # signal not already set and value is not a signal object ==> get signal class by id and create object
+            self._signals[signal_identifier] = signals.SIGNALS[signal_identifier](value)
 
 
 class ASETDocument:
@@ -209,13 +203,16 @@ class ASETDocument:
 
     The ASETDocument actually owns the text of the document it represents. It stores a list of all the nuggets derived
     from it. Furthermore, it stores mappings from attribute names to lists of ASETNuggets derived from the document.
+
+    ASETDocuments can have signals. Signals are values that can be set for a given document, but do not necessarily need
+    to be set for every document.
     """
 
     def __init__(self, name: str, text: str) -> None:
         """
         Initialize the ASETDocument.
 
-        :param name: name of the document (must be unique)
+        :param name: name of the document (must be unique in the document base)
         :param text: text of the document
         """
         self._name: str = name
@@ -224,7 +221,7 @@ class ASETDocument:
         self._nuggets: List[ASETNugget] = []
         self._attribute_mappings: Dict[str, List[ASETNugget]] = {}
 
-        self._annotations: Dict[str, BaseAnnotation] = {}
+        self._signals: Dict[str, BaseSignal] = {}
 
     def __str__(self) -> str:
         return f"'{self._text}'"
@@ -242,7 +239,7 @@ class ASETDocument:
                 and self._text == other._text
                 and self._nuggets == other._nuggets
                 and self._attribute_mappings == other._attribute_mappings
-                and self._annotations == other._annotations
+                and self._signals == other._signals
         )
 
     @property
@@ -266,34 +263,42 @@ class ASETDocument:
         return self._attribute_mappings
 
     @property
-    def annotations(self) -> Dict[str, BaseAnnotation]:
-        """Annotation values associated with the document."""
-        return self._annotations
+    def signals(self) -> Dict[str, BaseSignal]:
+        """Signals associated with the document."""
+        return self._signals
 
-    def __getitem__(self, item: Union[str, Type[BaseAnnotation]]) -> Any:
+    def __getitem__(self, item: Union[str, Type[BaseSignal]]) -> Any:
+        """
+        Get the document's signal values.
+
+        :param item: signal class or signal identifier
+        :return: value of the signal
+        """
         if isinstance(item, str):
-            annotation_str: str = item
+            signal_identifier: str = item
         else:
-            annotation_str: str = item.annotation_str
+            signal_identifier: str = item.identifier
 
-        if annotation_str not in self._annotations.keys():
-            assert False, f"No value for annotation '{annotation_str}'!"
-        return self._annotations[annotation_str].value
+        return self._signals[signal_identifier].value
 
-    def __setitem__(self, key: Union[str, Type[BaseAnnotation]], value: Union[BaseAnnotation, Any]):
+    def __setitem__(self, key: Union[str, Type[BaseSignal]], value: Union[BaseSignal, Any]):
+        """
+        Set the document's signal values.
+
+        :param key: signal class or signal identifier
+        :param value: signal or signal value
+        """
         if isinstance(key, str):
-            annotation_str: str = key
+            signal_identifier: str = key
         else:
-            annotation_str: str = key.annotation_str
+            signal_identifier: str = key.identifier
 
-        if annotation_str not in self._annotations.keys():
-            if not isinstance(value, BaseAnnotation):
-                assert False, f"Annotation '{annotation_str}' has not been initialized yet!"
-            self._annotations[annotation_str] = value
-        if isinstance(value, BaseAnnotation):
-            self._annotations[annotation_str] = value
-        else:
-            self._annotations[annotation_str].value = value
+        if isinstance(value, BaseSignal):
+            self._signals[signal_identifier] = value
+        elif signal_identifier in self._signals.keys():
+            self._signals[signal_identifier].value = value
+        else:  # signal not already set and value is not a signal object ==> get signal class by id and create object
+            self._signals[signal_identifier] = signals.SIGNALS[signal_identifier](value)
 
 
 class ASETDocumentBase:
@@ -348,6 +353,56 @@ class ASETDocumentBase:
             nuggets += document.nuggets
         return nuggets
 
+    def get_nuggets_for_attribute(self, attribute: Union[str, ASETAttribute]) -> List[ASETNugget]:
+        """
+        List of all nuggets that match the given attribute.
+
+        This list does not encode where the nuggets come from.
+
+        :param attribute: attribute or attribute name
+        :return: list of all nuggets that match the given attribute
+        """
+        if isinstance(attribute, str):
+            attribute_name: str = attribute
+        else:
+            attribute_name: str = attribute.name
+
+        nugget_list: List[ASETNugget] = []
+        for document in self._documents:
+            if attribute_name in document.attribute_mappings.keys():
+                nugget_list += document.attribute_mappings[attribute_name]
+        return nugget_list
+
+    def get_column_for_attribute(self, attribute: Union[str, ASETAttribute]) -> List[Optional[List[ASETNugget]]]:
+        """
+        Column of nuggets that match the given attribute.
+
+        The column of nuggets is a list that for each document contains either a (possibly empty) list of matching
+        nuggets or None in case the document does not know of the ASETAttribute.
+
+        ========================
+        | [nugget-1, nugget-2] |
+        | None                 |
+        | [nugget-4]           |
+        | []                   |
+        ========================
+
+        :param attribute: attribute or attribute name
+        :return: column of nuggets that match the given attribute
+        """
+        if isinstance(attribute, str):
+            attribute_name: str = attribute
+        else:
+            attribute_name: str = attribute.name
+
+        nugget_column: List[Optional[List[ASETNugget]]] = []
+        for document in self._documents:
+            if attribute_name in document.attribute_mappings.keys():
+                nugget_column.append(document.attribute_mappings[attribute_name])
+            else:
+                nugget_column.append(None)
+        return nugget_column
+
     def to_table_dict(
             self, kind: Optional[str] = None
     ) -> Dict[str, List[Union[None, str, List[ASETNugget], List[Union[str, None]]]]]:
@@ -355,7 +410,7 @@ class ASETDocumentBase:
         Table representation of the information nuggets in the document base.
 
         The table is stored as a dictionary of columns. It uses the names of attributes and documents, and the parameter
-        'kind' determines whether the nuggets *text*, *value* or the nuggets themselves should be stored. A cell can
+        'kind' determines whether the nuggets' *text*, *value*, or the nuggets themselves should be stored. A cell can
         either be None, in which case the ASETDocument does not know of the ASETAttribute, or a (possibly empty) list of
         texts/values/nuggets.
 
@@ -372,7 +427,9 @@ class ASETDocumentBase:
         """
         result: Dict[
             str, List[Union[None, str, List[ASETNugget], List[Union[str, None]]]]
-        ] = {"document-name": [document.name for document in self._documents]}
+        ] = {
+            "document-name": [document.name for document in self._documents]
+        }
 
         for attribute in self._attributes:
             result[attribute.name] = []
@@ -385,15 +442,15 @@ class ASETDocumentBase:
                 elif kind == "text":
                     if attribute.name in document.attribute_mappings.keys():
                         result[attribute.name].append([
-                            n.text for n in document.attribute_mappings[attribute.name]
+                            nugget.text for nugget in document.attribute_mappings[attribute.name]
                         ])
                     else:
                         result[attribute.name].append(None)
                 elif kind == "value":
                     if attribute.name in document.attribute_mappings.keys():
                         result[attribute.name].append([
-                            str(n.value) if n.value is not None else None for n in
-                            document.attribute_mappings[attribute.name]
+                            str(nugget[ValueSignal]) if ValueSignal.identifier in nugget.signals.keys() else None
+                            for nugget in document.attribute_mappings[attribute.name]
                         ])
                     else:
                         result[attribute.name].append(None)
@@ -402,28 +459,34 @@ class ASETDocumentBase:
 
         return result
 
-    def validate_consistency(self) -> None:
+    def validate_consistency(self) -> bool:
         """Validate the consistency of the document base."""
         tick: float = time.time()
+
         # check that the document names are unique
-        assert len([d.name for d in self._documents]) == len(set([d.name for d in self._documents]))
+        if not len([d.name for d in self._documents]) == len(set([d.name for d in self._documents])):
+            return False
 
         # check that the attribute names are unique
-        assert len([a.name for a in self._attributes]) == len(set([a.name for a in self._attributes]))
+        if not len([a.name for a in self._attributes]) == len(set([a.name for a in self._attributes])):
+            return False
 
         # check that all nuggets in a document refer to that document
         for document in self._documents:
             for nugget in document.nuggets:
-                assert nugget.document is document
+                if nugget.document is not document:
+                    return False
 
         # check that the nuggets' span indices are valid
         for nugget in self.nuggets:
-            assert 0 <= nugget.start_char < nugget.end_char <= len(nugget.document.text)
+            if not 0 <= nugget.start_char < nugget.end_char <= len(nugget.document.text):
+                return False
 
         # check that all attribute names in attribute mappings are part of the document base
         for document in self._documents:
             for attribute_name in document.attribute_mappings.keys():
-                assert attribute_name in [attribute.name for attribute in self._attributes]
+                if attribute_name not in [attribute.name for attribute in self._attributes]:
+                    return False
 
         # check that all nuggets referred to in attribute mappings are part of the document
         for document in self._documents:
@@ -433,25 +496,29 @@ class ASETDocumentBase:
                         if nug is nugget:
                             break
                     else:
-                        assert False
+                        return False
 
-        # check that all nugget signals are stored under their own signal string
+        # check that all nugget signals are stored under their own signal identifier
         for nugget in self.nuggets:
-            for signal_str, signal in nugget.signals.items():
-                assert signal_str == signal.signal_str
+            for signal_identifier, signal in nugget.signals.items():
+                if signal_identifier != signal.identifier:
+                    return False
 
-        # check that all attribute signals are stored under their own signal string
+        # check that all attribute signals are stored under their own signal identifier
         for attribute in self._attributes:
-            for signal_str, signal in attribute.signals.items():
-                assert signal_str == signal.signal_str
+            for signal_identifier, signal in attribute.signals.items():
+                if signal_identifier != signal.identifier:
+                    return False
 
-        # check that all document annotations are stored under their own annotation string
+        # check that all document signals are stored under their own signal identifier
         for document in self._documents:
-            for annotation_str, annotation in document.annotations.items():
-                assert annotation_str == annotation.annotation_str
+            for signal_identifier, signal in document.signals.items():
+                if signal_identifier != signal.identifier:
+                    return False
 
         tack: float = time.time()
         logger.info(f"Validated document base consistency in {tack - tick} seconds.")
+        return True
 
     def to_bson(self) -> bytes:
         """
@@ -463,9 +530,15 @@ class ASETDocumentBase:
         """
         tick: float = time.time()
 
+        # validate document base consistency
+        if not self.validate_consistency():
+            logger.error("Cannot serialize an inconsistent document base!")
+            assert False, "Cannot serialize an inconsistent document base!"
+
         # serialize the document base
         serializable_base: Dict[str, Any] = {"documents": [], "attributes": []}
 
+        logger.info("Serialize attributes.")
         for attribute in self._attributes:
             # serialize the attribute
             serializable_attribute: Dict[str, Any] = {
@@ -474,12 +547,13 @@ class ASETDocumentBase:
             }
 
             # serialize the signals
-            for signal_str, signal in attribute.signals.items():
+            for signal_identifier, signal in attribute.signals.items():
                 if signal.do_serialize:
-                    serializable_attribute["signals"][signal_str] = signal.to_serializable()
+                    serializable_attribute["signals"][signal_identifier] = signal.to_serializable()
 
             serializable_base["attributes"].append(serializable_attribute)
 
+        logger.info("Serialize documents.")
         for document in self._documents:
             # serialize the document
             serializable_document: Dict[str, Any] = {
@@ -487,7 +561,7 @@ class ASETDocumentBase:
                 "text": document.text,
                 "nuggets": [],
                 "attribute_mappings": {},
-                "annotations": {}
+                "signals": {}
             }
 
             # serialize the attribute mappings
@@ -503,30 +577,28 @@ class ASETDocumentBase:
 
                 serializable_document["attribute_mappings"][name] = nugget_ids
 
-            # serialize the annotations
-            for annotation_str, annotation in document.annotations.items():
-                if annotation.do_serialize:
-                    serializable_document["annotations"][annotation_str] = annotation.to_serializable()
+            # serialize the signals
+            for signal_identifier, signal in document.signals.items():
+                if signal.do_serialize:
+                    serializable_document["signals"][signal_identifier] = signal.to_serializable()
 
             for nugget in document.nuggets:
                 # serialize the nugget
                 serializable_nugget: Dict[str, Any] = {
                     "start_char": nugget.start_char,
                     "end_char": nugget.end_char,
-                    "extractor_str": nugget.extractor_str,
-                    "type_str": nugget.type_str,
-                    "value": nugget.value,
                     "signals": {}
                 }
 
                 # serialize the signals
-                for signal_str, signal in nugget.signals.items():
+                for signal_identifier, signal in nugget.signals.items():
                     if signal.do_serialize:
-                        serializable_nugget["signals"][signal_str] = signal.to_serializable()
+                        serializable_nugget["signals"][signal_identifier] = signal.to_serializable()
 
                 serializable_document["nuggets"].append(serializable_nugget)
             serializable_base["documents"].append(serializable_document)
 
+        logger.info("Convert to BSON bytes.")
         bson_bytes: bytes = bson.encode(serializable_base)
 
         tack: float = time.time()
@@ -541,25 +613,30 @@ class ASETDocumentBase:
 
         https://pymongo.readthedocs.io/en/stable/api/bson/index.html
 
+        :param bson_bytes: BSON byte representation of the document base
         :return: document base created from the BSON byte string
         """
         tick: float = time.time()
 
+        logger.info("Convert from BSON bytes.")
         serialized_base: Dict[str, Any] = bson.decode(bson_bytes)
 
         # deserialize the document base
         document_base: "ASETDocumentBase" = cls([], [])
 
+        logger.info("Deserialize attributes.")
         for serialized_attribute in serialized_base["attributes"]:
             # deserialize the attribute
             attribute: ASETAttribute = ASETAttribute(name=serialized_attribute["name"])
 
             # deserialize the signals
-            for signal_str, serialized_signal in serialized_attribute["signals"].items():
-                attribute.signals[signal_str] = BaseSignal.from_serializable(serialized_signal, signal_str)
+            for signal_identifier, serialized_signal in serialized_attribute["signals"].items():
+                signal: BaseSignal = BaseSignal.from_serializable(serialized_signal, signal_identifier)
+                attribute.signals[signal_identifier] = signal
 
             document_base.attributes.append(attribute)
 
+        logger.info("Deserialize documents.")
         for serialized_document in serialized_base["documents"]:
             # deserialize the document
             document: ASETDocument = ASETDocument(name=serialized_document["name"], text=serialized_document["text"])
@@ -569,15 +646,13 @@ class ASETDocumentBase:
                 nugget: ASETNugget = ASETNugget(
                     document=document,
                     start_char=serialized_nugget["start_char"],
-                    end_char=serialized_nugget["end_char"],
-                    extractor_str=serialized_nugget["extractor_str"],
-                    type_str=serialized_nugget["type_str"],
-                    value=serialized_nugget["value"]
+                    end_char=serialized_nugget["end_char"]
                 )
 
                 # deserialize the signals
-                for signal_str, serialized_signal in serialized_nugget["signals"].items():
-                    nugget.signals[signal_str] = BaseSignal.from_serializable(serialized_signal, signal_str)
+                for signal_identifier, serialized_signal in serialized_nugget["signals"].items():
+                    signal: BaseSignal = BaseSignal.from_serializable(serialized_signal, signal_identifier)
+                    nugget.signals[signal_identifier] = signal
 
                 document.nuggets.append(nugget)
 
@@ -585,12 +660,17 @@ class ASETDocumentBase:
             for name, indices in serialized_document["attribute_mappings"].items():
                 document.attribute_mappings[name] = [document.nuggets[idx] for idx in indices]
 
-            # deserialize the annotations
-            for annotation_str, serialized_annotation in serialized_document["annotations"].items():
-                annotation: BaseAnnotation = BaseAnnotation.from_serializable(serialized_annotation, annotation_str)
-                document.annotations[annotation_str] = annotation
+            # deserialize the signals
+            for signal_identifier, serialized_signal in serialized_document["signals"].items():
+                signal: BaseSignal = BaseSignal.from_serializable(serialized_signal, signal_identifier)
+                document.signals[signal_identifier] = signal
 
             document_base.documents.append(document)
+
+        # validate document base consistency
+        if not document_base.validate_consistency():
+            logger.error("Cannot deserialize an inconsistent document base!")
+            assert False, "Cannot deserialize an inconsistent document base!"
 
         tack: float = time.time()
         logger.info(f"Deserialized document base in {tack - tick} seconds.")

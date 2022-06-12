@@ -7,15 +7,20 @@ from json import JSONDecodeError
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from bson import InvalidBSON
 
+from aset.configuration import ASETPipeline
 from aset.data.data import ASETAttribute, ASETDocument, ASETDocumentBase
+from aset.interaction import EmptyInteractionCallback, InteractionCallback
 from aset.matching.distance import SignalsMeanDistance
-from aset.matching.phase import BaseMatchingPhase, RankingBasedMatchingPhase
+from aset.matching.matching import RankingBasedMatcher
 from aset.preprocessing.embedding import BERTContextSentenceEmbedder, FastTextLabelEmbedder, RelativePositionEmbedder, \
     SBERTTextEmbedder
 from aset.preprocessing.extraction import StanzaNERExtractor
-from aset.preprocessing.phase import PreprocessingPhase
+from aset.preprocessing.label_paraphrasing import OntoNotesLabelParaphraser, \
+    CopyAttributeNameLabelParaphraser, SplitAttributeNameLabelParaphraser
+from aset.preprocessing.normalization import VerySimpleDateNormalizer
+from aset.preprocessing.other_processing import ContextSentenceCacher
 from aset.statistics import Statistics
-from aset.status import StatusFunction
+from aset.status import StatusCallback
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +41,8 @@ class ASETAPI(QObject):
     finished = pyqtSignal(str)  # message
     error = pyqtSignal(str)  # message
     document_base_to_ui = pyqtSignal(ASETDocumentBase)  # document base
-    preprocessing_phase_to_ui = pyqtSignal(PreprocessingPhase)  # preprocessing phase
-    matching_phase_to_ui = pyqtSignal(BaseMatchingPhase)  # matching phase
+    preprocessing_phase_to_ui = pyqtSignal(ASETPipeline)  # preprocessing phase
+    matching_phase_to_ui = pyqtSignal(ASETPipeline)  # matching phase
     statistics_to_ui = pyqtSignal(Statistics)  # statistics
     feedback_request_to_ui = pyqtSignal(dict)
 
@@ -77,6 +82,11 @@ class ASETAPI(QObject):
 
             document_base = ASETDocumentBase(documents, attributes)
 
+            if not document_base.validate_consistency():
+                logger.error("Document base is inconsistent!")
+                self.error.emit("Document base is inconsistent!")
+                return
+
             self.document_base_to_ui.emit(document_base)
             self.finished.emit("Finished!")
         except FileNotFoundError:
@@ -101,6 +111,32 @@ class ASETAPI(QObject):
                 document_base.attributes.append(ASETAttribute(name))
                 self.document_base_to_ui.emit(document_base)
                 self.finished.emit("Finished!")
+        except Exception as e:
+            logger.error(str(e))
+            self.error.emit(str(e))
+
+    @pyqtSlot(list, ASETDocumentBase)
+    def add_attributes(self, names, document_base):
+        logger.debug("Called slot 'add_attributes'.")
+        self.status.emit("Adding attributes...", -1)
+        try:
+            already_existing_names = []
+            for name in names:
+                if name in [attribute.name for attribute in document_base.attributes]:
+                    logger.info(f"Attribute name '{name}' already exists and was thus not added.")
+                    already_existing_names.append(name)
+                elif name == "":
+                    logger.info("Attribute name must not be empty and was thus ignored.")
+                else:
+                    document_base.attributes.append(ASETAttribute(name))
+            self.document_base_to_ui.emit(document_base)
+            if already_existing_names == []:
+                self.finished.emit("Finished!")
+            elif len(already_existing_names) == 1:
+                self.finished.emit(f"Attribute '{already_existing_names[0]}' already existed and was thus not added!")
+            else:
+                list_str = ", ".join(f"'{name}'" for name in already_existing_names)
+                self.finished.emit(f"Attributes {list_str} already existed and were thus not added!")
         except Exception as e:
             logger.error(str(e))
             self.error.emit(str(e))
@@ -153,6 +189,12 @@ class ASETAPI(QObject):
         try:
             with open(path, "rb") as file:
                 document_base = ASETDocumentBase.from_bson(file.read())
+
+                if not document_base.validate_consistency():
+                    logger.error("Document base is inconsistent!")
+                    self.error.emit("Document base is inconsistent!")
+                    return
+
                 self.document_base_to_ui.emit(document_base)
                 self.finished.emit("Finished!")
         except FileNotFoundError:
@@ -230,7 +272,7 @@ class ASETAPI(QObject):
         self.status.emit("Loading preprocessing phase from config...", -1)
         try:
             with open(path, "r", encoding="utf-8") as file:
-                preprocessing_phase = PreprocessingPhase.from_config(json.load(file))
+                preprocessing_phase = ASETPipeline.from_config(json.load(file))
                 self.preprocessing_phase_to_ui.emit(preprocessing_phase)
                 self.finished.emit("Finished!")
         except FileNotFoundError:
@@ -243,7 +285,7 @@ class ASETAPI(QObject):
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(str, PreprocessingPhase)
+    @pyqtSlot(str, ASETPipeline)
     def save_preprocessing_phase_to_config(self, path, preprocessing_phase):
         logger.debug("Called slot 'save_preprocessing_phase_to_config'.")
         self.status.emit("Saving preprocessing phase to config...", -1)
@@ -264,7 +306,7 @@ class ASETAPI(QObject):
         self.status.emit("Loading matching phase from config...", -1)
         try:
             with open(path, "r", encoding="utf-8") as file:
-                matching_phase = BaseMatchingPhase.from_config(json.load(file))
+                matching_phase = ASETPipeline.from_config(json.load(file))
                 self.matching_phase_to_ui.emit(matching_phase)
                 self.finished.emit("Finished!")
         except FileNotFoundError:
@@ -277,7 +319,7 @@ class ASETAPI(QObject):
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(str, BaseMatchingPhase)
+    @pyqtSlot(str, ASETPipeline)
     def save_matching_phase_to_config(self, path, matching_phase):
         logger.debug("Called slot 'save_matching_phase_to_config'.")
         self.status.emit("Saving matching phase to config...", -1)
@@ -292,7 +334,7 @@ class ASETAPI(QObject):
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(ASETDocumentBase, PreprocessingPhase, Statistics)
+    @pyqtSlot(ASETDocumentBase, ASETPipeline, Statistics)
     def run_preprocessing_phase(self, document_base, preprocessing_phase, statistics):
         logger.debug("Called slot 'run_preprocessing_phase'.")
         self.status.emit("Running preprocessing phase...", -1)
@@ -300,9 +342,10 @@ class ASETAPI(QObject):
             def status_callback_fn(message, progress):
                 self.status.emit(message, progress)
 
-            status_fn = StatusFunction(status_callback_fn)
+            status_callback = StatusCallback(status_callback_fn)
 
-            preprocessing_phase(document_base, status_fn, statistics)
+            preprocessing_phase(document_base, EmptyInteractionCallback(), status_callback, statistics)
+
             self.document_base_to_ui.emit(document_base)
             self.statistics_to_ui.emit(statistics)
             self.finished.emit("Finished!")
@@ -310,7 +353,7 @@ class ASETAPI(QObject):
             logger.error(str(e))
             self.error.emit(str(e))
 
-    @pyqtSlot(ASETDocumentBase, BaseMatchingPhase, Statistics)
+    @pyqtSlot(ASETDocumentBase, ASETPipeline, Statistics)
     def run_matching_phase(self, document_base, matching_phase, statistics):
         logger.debug("Called slot 'run_matching_phase'.")
         self.status.emit("Running matching phase...", -1)
@@ -318,9 +361,10 @@ class ASETAPI(QObject):
             def status_callback_fn(message, progress):
                 self.status.emit(message, progress)
 
-            status_fn = StatusFunction(status_callback_fn)
+            status_callback = StatusCallback(status_callback_fn)
 
-            def feedback_fn(feedback_request):
+            def interaction_callback_fn(pipeline_element_identifier, feedback_request):
+                feedback_request["identifier"] = pipeline_element_identifier
                 self.feedback_request_to_ui.emit(feedback_request)
 
                 self.feedback_mutex.lock()
@@ -331,7 +375,10 @@ class ASETAPI(QObject):
 
                 return self.feedback
 
-            matching_phase(document_base, feedback_fn, status_fn, statistics)
+            interaction_callback = InteractionCallback(interaction_callback_fn)
+
+            matching_phase(document_base, interaction_callback, status_callback, statistics)
+
             self.document_base_to_ui.emit(document_base)
             self.statistics_to_ui.emit(statistics)
             self.finished.emit("Finished!")
@@ -361,12 +408,13 @@ class ASETAPI(QObject):
             # load default preprocessing phase
             self.status.emit("Loading default preprocessing phase...", -1)
 
-            preprocessing_phase = PreprocessingPhase(
-                extractors=[
-                    StanzaNERExtractor()
-                ],
-                normalizers=[],
-                embedders=[
+            preprocessing_phase = ASETPipeline(
+                [
+                    StanzaNERExtractor(),
+                    VerySimpleDateNormalizer(),
+                    OntoNotesLabelParaphraser(),
+                    CopyAttributeNameLabelParaphraser(),
+                    ContextSentenceCacher(),
                     FastTextLabelEmbedder("FastTextEmbedding100000", True, [" ", "_"]),
                     SBERTTextEmbedder("SBERTBertLargeNliMeanTokensResource"),
                     BERTContextSentenceEmbedder("BertLargeCasedResource"),
@@ -375,14 +423,12 @@ class ASETAPI(QObject):
             )
 
             # run preprocessing phase
-            self.status.emit("Running preprocessing phase...", -1)
-
             def status_callback_fn(message, progress):
                 self.status.emit(message, progress)
 
-            status_fn = StatusFunction(status_callback_fn)
+            status_callback = StatusCallback(status_callback_fn)
 
-            preprocessing_phase(document_base, status_fn, statistics)
+            preprocessing_phase(document_base, EmptyInteractionCallback(), status_callback, statistics)
 
             self.preprocessing_phase_to_ui.emit(preprocessing_phase)
             self.document_base_to_ui.emit(document_base)
@@ -399,29 +445,37 @@ class ASETAPI(QObject):
             # load default matching phase
             self.status.emit("Loading default matching phase...", -1)
 
-            matching_phase = RankingBasedMatchingPhase(
-                distance=SignalsMeanDistance(
-                    signal_strings=[
-                        "LabelEmbeddingSignal",
-                        "TextEmbeddingSignal",
-                        "ContextSentenceEmbeddingSignal",
-                        "RelativePositionSignal"
-                    ]
-                ),
-                max_num_feedback=25,
-                len_ranked_list=10,
-                max_distance=0.6
+            matching_phase = ASETPipeline(
+                [
+                    SplitAttributeNameLabelParaphraser(do_lowercase=True, splitters=[" ", "_"]),
+                    ContextSentenceCacher(),
+                    FastTextLabelEmbedder("FastTextEmbedding100000", True, [" ", "_"]),
+                    RankingBasedMatcher(
+                        distance=SignalsMeanDistance(
+                            signal_identifiers=[
+                                "LabelEmbeddingSignal",
+                                "TextEmbeddingSignal",
+                                "ContextSentenceEmbeddingSignal",
+                                "RelativePositionSignal"
+                            ]
+                        ),
+                        max_num_feedback=20,
+                        len_ranked_list=10,
+                        max_distance=0.2,
+                        num_random_docs=1,
+                        sampling_mode="AT_MAX_DISTANCE_THRESHOLD"
+                    )
+                ]
             )
 
             # run matching phase
-            self.status.emit("Running matching phase...", -1)
-
             def status_callback_fn(message, progress):
                 self.status.emit(message, progress)
 
-            status_fn = StatusFunction(status_callback_fn)
+            status_callback = StatusCallback(status_callback_fn)
 
-            def feedback_fn(feedback_request):
+            def interaction_callback_fn(pipeline_element_identifier, feedback_request):
+                feedback_request["identifier"] = pipeline_element_identifier
                 self.feedback_request_to_ui.emit(feedback_request)
 
                 self.feedback_mutex.lock()
@@ -432,7 +486,9 @@ class ASETAPI(QObject):
 
                 return self.feedback
 
-            matching_phase(document_base, feedback_fn, status_fn, statistics)
+            interaction_callback = InteractionCallback(interaction_callback_fn)
+
+            matching_phase(document_base, interaction_callback, status_callback, statistics)
 
             self.matching_phase_to_ui.emit(matching_phase)
             self.document_base_to_ui.emit(document_base)

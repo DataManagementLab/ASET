@@ -1,74 +1,158 @@
 import abc
 import logging
-from typing import Any, Dict, Type
+from typing import Any, Dict, List
 
-from aset.config import ConfigurableElement
-from aset.data.data import ASETDocumentBase
+from aset.configuration import register_configurable_element, BasePipelineElement
+from aset.data.data import ASETDocumentBase, ASETNugget
+from aset.data.signals import LabelSignal, ValueSignal
+from aset.interaction import BaseInteractionCallback
 from aset.statistics import Statistics
-from aset.status import StatusFunction
+from aset.status import BaseStatusCallback
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-NORMALIZERS: Dict[str, Type["BaseNormalizer"]] = {}
 
-
-def register_normalizer(normalizer: Type["BaseNormalizer"]) -> Type["BaseNormalizer"]:
-    """Register the given normalizer class."""
-    NORMALIZERS[normalizer.normalizer_str] = normalizer
-    return normalizer
-
-
-class BaseNormalizer(ConfigurableElement, abc.ABC):
+class BaseNormalizer(BasePipelineElement, abc.ABC):
     """
-    Normalizers work on ASETNuggets to derive their structured data values.
+    Base class for all normalizers.
 
-    They are configurable elements and should be applied in the preprocessing phase. A normalizer does not have to work
-    with every nugget in the document base. Each normalizer comes with an identifier ('normalizer_str').
+    Normalizers derive the value of an information nuggets from its mention text.
     """
+    identifier: str = "BaseNormalizer"
 
-    normalizer_str: str = "BaseNormalizer"
 
-    def __str__(self) -> str:
-        return self.normalizer_str
+########################################################################################################################
+# actual normalizers
+########################################################################################################################
 
-    def __eq__(self, other) -> bool:
-        return isinstance(other, self.__class__) and self.normalizer_str == other.normalizer_str
 
-    def __hash__(self) -> int:
-        return hash(self.normalizer_str)
+@register_configurable_element
+class CopyNormalizer(BaseNormalizer):
+    """
+    Normalizer that simply uses the nuggets' mention texts as their values if the value signal does not already exist.
+    """
+    identifier: str = "CopyNormalizer"
 
-    def _use_status_fn(self, status_fn: StatusFunction, document_base: ASETDocumentBase, ix: int) -> None:
-        """
-        Helper method that calls the status function at regular intervals.
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [],
+        "attributes": [],
+        "documents": []
+    }
 
-        :param status_fn: status function to call
-        :param document_base: ASETDocumentBase to work on
-        :param ix: index of the current document
-        """
-        if ix == 0:
-            status_fn(f"Running {self.normalizer_str}...", 0)
-        else:
-            num_documents: int = len(document_base.documents)
-            interval: int = num_documents // 10
-            if interval != 0 and ix % interval == 0:
-                status_fn(f"Running {self.normalizer_str}...", ix / num_documents)
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [ValueSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
 
-    @abc.abstractmethod
-    def __call__(
+    def __init__(self) -> None:
+        super(CopyNormalizer, self).__init__()
+
+        logger.debug(f"Initialized '{self.identifier}'.")
+
+    def _call(
             self,
             document_base: ASETDocumentBase,
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
-        """
-        Derive structured data values for ASETNuggets of the given ASETDocumentBase.
+        nuggets: List[ASETNugget] = document_base.nuggets  # document_base.nuggets has overhead
+        statistics["num_nuggets"] = len(nuggets)
 
-        :param document_base: ASETDocumentBase to work on
-        :param status_fn: callback function to communicate current status (message and progress)
-        :param statistics: statistics object to collect statistics
-        """
-        raise NotImplementedError
+        for ix, nugget in enumerate(nuggets):
+            self._use_status_callback(status_callback, ix, len(nuggets))
+
+            if ValueSignal.identifier not in nugget.signals.keys():
+                statistics["num_value_set"] += 1
+                nugget[ValueSignal] = ValueSignal(nugget.text)
+            else:
+                statistics["num_value_already_exists"] += 1
+
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "identifier": self.identifier
+        }
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "BaseNormalizer":
-        return NORMALIZERS[config["normalizer_str"]].from_config(config)
+    def from_config(cls, config: Dict[str, Any]) -> "CopyNormalizer":
+        return cls()
+
+
+@register_configurable_element
+class VerySimpleDateNormalizer(BaseNormalizer):
+    identifier: str = "VerySimpleDateNormalizer"
+
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [LabelSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
+
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [ValueSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
+
+    def __init__(self) -> None:
+        super(VerySimpleDateNormalizer, self).__init__()
+
+        logger.debug(f"Initialized '{self.identifier}'.")
+
+    def _call(
+            self,
+            document_base: ASETDocumentBase,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
+            statistics: Statistics
+    ) -> None:
+        nuggets: List[ASETNugget] = document_base.nuggets  # document_base.nuggets has overhead
+        statistics["num_nuggets"] = len(nuggets)
+        statistics["date_value_failed"] = set()
+
+        for ix, nugget in enumerate(nuggets):
+            self._use_status_callback(status_callback, ix, len(nuggets))
+
+            if nugget[LabelSignal] == "DATE":
+                year = nugget.text[-4:]
+
+                month_mapping = {
+                    "January": "01",
+                    "February": "02",
+                    "March": "03",
+                    "April": "04",
+                    "May": "05",
+                    "June": "06",
+                    "July": "07",
+                    "August": "08",
+                    "September": "09",
+                    "October": "10",
+                    "November": "11",
+                    "December": "12"
+                }
+                if " " in nugget.text:
+                    month = nugget.text[:nugget.text.index(" ")]
+                    if month in month_mapping.keys() and " " in nugget.text and "," in nugget.text:
+                        month = month_mapping[month]
+                        day = nugget.text[nugget.text.index(" ") + 1:nugget.text.index(",")]
+                        day = day.rjust(2, "0")
+                        nugget[ValueSignal] = ValueSignal(f"{year}-{month}-{day}")
+                        statistics["num_date_value_set"] += 1
+                        continue
+
+                nugget[ValueSignal] = ValueSignal(nugget.text)
+                statistics["num_date_value_failed"] += 1
+                statistics["date_value_failed"].add(nugget.text)
+            else:
+                nugget[ValueSignal] = ValueSignal(nugget.text)
+                statistics["num_other_value_copied"] += 1
+
+    def to_config(self) -> Dict[str, Any]:
+        return {
+            "identifier": self.identifier
+        }
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> "VerySimpleDateNormalizer":
+        return cls()

@@ -2,9 +2,9 @@ import abc
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-# fonts
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QFrame
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QFrame, QHBoxLayout
 
+# fonts
 HEADER_FONT = QFont("Segoe UI", pointSize=20, weight=QFont.Weight.Bold)
 SUBHEADER_FONT = QFont("Segoe UI", pointSize=14, weight=QFont.Weight.DemiBold)
 LABEL_FONT = QFont("Segoe UI", pointSize=11)
@@ -15,6 +15,21 @@ CODE_FONT_BOLD = QFont("Consolas", pointSize=12, weight=QFont.Weight.Bold)
 MENU_FONT = QFont("Segoe UI", pointSize=11)
 STATUS_BAR_FONT = QFont("Segoe UI", pointSize=11)
 BUTTON_FONT = QFont("Segoe UI", pointSize=11)
+
+# colors
+WHITE = "#FFFFFF"
+BLACK = "#000000"
+
+YELLOW = "#FEC306"
+LIGHT_YELLOW = "#FFFAEB"
+ORANGE = "#F69200"
+LIGHT_ORANGE = "#FFF5E7"
+RED = "#DF5327"
+LIGHT_RED = "#FBE7E1"
+BLUE = "#418AB3"
+LIGHT_BLUE = "#DDEBF3"
+GREEN = "#A6B727"
+LIGHT_GREEN = "#EEF3C9"
 
 
 class MainWindowContent(QWidget):
@@ -59,7 +74,7 @@ class MainWindowContentSection(QWidget):
 
 class CustomScrollableList(QWidget):
 
-    def __init__(self, parent, item_type, floating_widget=None):
+    def __init__(self, parent, item_type, floating_widget=None, orientation="vertical"):
         super(CustomScrollableList, self).__init__()
         self.parent = parent
         self.item_type = item_type
@@ -69,10 +84,16 @@ class CustomScrollableList(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
 
         self.list_widget = QWidget()
-        self.list_layout = QVBoxLayout(self.list_widget)
+        if orientation == "vertical":
+            self.list_layout = QVBoxLayout(self.list_widget)
+            self.list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        elif orientation == "horizontal":
+            self.list_layout = QHBoxLayout(self.list_widget)
+            self.list_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        else:
+            assert False, f"Unknown mode '{orientation}'!"
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(10)
-        self.list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)

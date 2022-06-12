@@ -5,10 +5,10 @@ from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QPushButton, \
     QVBoxLayout, QWidget, QInputDialog
 
+from aset.configuration import ASETPipeline
 from aset.data.data import ASETDocumentBase
-from aset.matching.phase import BaseMatchingPhase
-from aset.preprocessing.phase import PreprocessingPhase
 from aset.statistics import Statistics
+from aset_parsql.parsql import Parser
 from aset_ui.aset_api import ASETAPI
 from aset_ui.common import HEADER_FONT, MENU_FONT, STATUS_BAR_FONT, SUBHEADER_FONT, LABEL_FONT
 from aset_ui.document_base import DocumentBaseCreatorWidget, DocumentBaseViewerWidget
@@ -23,6 +23,7 @@ class MainWindow(QMainWindow):
     ################################
     create_document_base = pyqtSignal(str, list)
     add_attribute = pyqtSignal(str, ASETDocumentBase)
+    add_attributes = pyqtSignal(list, ASETDocumentBase)
     remove_attribute = pyqtSignal(str, ASETDocumentBase)
     forget_matches_for_attribute = pyqtSignal(str, ASETDocumentBase)
     load_document_base_from_bson = pyqtSignal(str)
@@ -30,11 +31,11 @@ class MainWindow(QMainWindow):
     save_table_to_csv = pyqtSignal(str, ASETDocumentBase)
     forget_matches = pyqtSignal(ASETDocumentBase)
     load_preprocessing_phase_from_config = pyqtSignal(str)
-    save_preprocessing_phase_to_config = pyqtSignal(str, PreprocessingPhase)
+    save_preprocessing_phase_to_config = pyqtSignal(str, ASETPipeline)
     load_matching_phase_from_config = pyqtSignal(str)
-    save_matching_phase_to_config = pyqtSignal(str, BaseMatchingPhase)
-    run_preprocessing_phase = pyqtSignal(ASETDocumentBase, PreprocessingPhase, Statistics)
-    run_matching_phase = pyqtSignal(ASETDocumentBase, BaseMatchingPhase, Statistics)
+    save_matching_phase_to_config = pyqtSignal(str, ASETPipeline)
+    run_preprocessing_phase = pyqtSignal(ASETDocumentBase, ASETPipeline, Statistics)
+    run_matching_phase = pyqtSignal(ASETDocumentBase, ASETPipeline, Statistics)
     save_statistics_to_json = pyqtSignal(str, Statistics)
     load_and_run_default_preprocessing_phase = pyqtSignal(ASETDocumentBase, Statistics)
     load_and_run_default_matching_phase = pyqtSignal(ASETDocumentBase, Statistics)
@@ -95,7 +96,7 @@ class MainWindow(QMainWindow):
         if self.matching_phase is not None:
             self._was_enabled.append(self.run_matching_phase_action)
 
-    @pyqtSlot(PreprocessingPhase)
+    @pyqtSlot(ASETPipeline)
     def preprocessing_phase_to_ui(self, preprocessing_phase):
         logger.debug("Called slot 'preprocessing_phase_to_ui'.")
 
@@ -105,7 +106,7 @@ class MainWindow(QMainWindow):
         if self.document_base is not None:
             self._was_enabled.append(self.run_preprocessing_phase_action)
 
-    @pyqtSlot(BaseMatchingPhase)
+    @pyqtSlot(ASETPipeline)
     def matching_phase_to_ui(self, matching_phase):
         logger.debug("Called slot 'matching_phase_to_ui'.")
 
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
     def _connect_slots_and_signals(self):
         self.create_document_base.connect(self.api.create_document_base)
         self.add_attribute.connect(self.api.add_attribute)
+        self.add_attributes.connect(self.api.add_attributes)
         self.remove_attribute.connect(self.api.remove_attribute)
         self.forget_matches_for_attribute.connect(self.api.forget_matches_for_attribute)
         self.load_document_base_from_bson.connect(self.api.load_document_base_from_bson)
@@ -177,6 +179,29 @@ class MainWindow(QMainWindow):
                 self.disable_global_input()
                 # noinspection PyUnresolvedReferences
                 self.save_document_base_to_bson.emit(str(path), self.document_base)
+
+    def enter_query_task(self):
+        logger.info("Execute task 'enter_query_task'.")
+
+        if self.document_base is not None:
+            query, ok = QInputDialog.getText(self, "Enter SQL Query", "SQL Query:")
+            if ok:
+                try:
+                    attributes, parsed = Parser().parse(query)
+                    logger.info(f"Derived attributes: {attributes}.")
+                    logger.info(f"Parsed: {parsed}")
+
+                    attribute_names = [str(attribute) for attribute in attributes]
+                    logger.info(f"Derived attribute names: {attribute_names}")
+
+                    self.disable_global_input()
+                    # noinspection PyUnresolvedReferences
+                    self.add_attributes.emit(attribute_names, self.document_base)
+                except Exception as e:
+                    logger.error(str(e))
+                    self.status_widget_message.setText(str(e))
+                    self.status_widget_progress.setRange(0, 100)
+                    self.status_widget_progress.setValue(0)
 
     def add_attribute_task(self):
         logger.info("Execute task 'add_attribute_task'.")

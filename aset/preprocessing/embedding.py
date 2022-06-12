@@ -1,205 +1,194 @@
 import abc
 import logging
 import time
-from typing import Any, Dict, List, Optional, Set, Type
+from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 
 from aset import resources
-from aset.config import ConfigurableElement
-from aset.data.annotations import SentenceStartCharsAnnotation
+from aset.configuration import BasePipelineElement, register_configurable_element
 from aset.data.data import ASETAttribute, ASETDocumentBase, ASETNugget
-from aset.data.signals import ContextSentenceEmbeddingSignal, LabelEmbeddingSignal, LabelSignal, \
-    RelativePositionSignal, TextEmbeddingSignal, UserProvidedExamplesSignal
+from aset.data.signals import ContextSentenceEmbeddingSignal, LabelEmbeddingSignal, RelativePositionSignal, \
+    TextEmbeddingSignal, UserProvidedExamplesSignal, NaturalLanguageLabelSignal, CachedContextSentenceSignal
+from aset.interaction import BaseInteractionCallback
 from aset.statistics import Statistics
-from aset.status import StatusFunction
+from aset.status import BaseStatusCallback
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-EMBEDDERS: Dict[str, Type["BaseEmbedder"]] = {}
 
-
-def register_embedder(embedder: Type["BaseEmbedder"]) -> Type["BaseEmbedder"]:
-    """Register the given embedder class."""
-    EMBEDDERS[embedder.embedder_str] = embedder
-    return embedder
-
-
-class BaseEmbedder(ConfigurableElement, abc.ABC):
+class BaseEmbedder(BasePipelineElement, abc.ABC):
     """
-    Embedders work on ASETNuggets and ASETAttributes to transform signals and other information into embedding signals.
+    Base class for all embedders.
 
-    They are configurable elements and should be applied in the preprocessing phase. Each embedder comes with an
-    identifier ('embedder_str'). The embedders are free in which signals they require as inputs and which signals they
-    produce as outputs. Furthermore, they do not have to work on both ASETNuggets and ASETAttributes
+    Embedders work with nuggets and attributes and transform their signals and other information into embedding signals.
     """
+    identifier: str = "BaseEmbedder"
 
-    embedder_str: str = "BaseEmbedder"
-
-    def __str__(self) -> str:
-        return self.embedder_str
-
-    def __eq__(self, other) -> bool:
-        return isinstance(other, self.__class__) and self.embedder_str == other.embedder_str
-
-    def __hash__(self) -> int:
-        return hash(self.embedder_str)
-
-    def _use_status_fn(self, status_fn: StatusFunction, element: str, total: int, ix: int) -> None:
+    def _use_status_callback_for_embedder(
+            self,
+            status_callback: BaseStatusCallback,
+            element: str,
+            ix: int,
+            total: int
+    ) -> None:
         """
-        Helper method that calls the status function at regular intervals.
+        Helper method that calls the status callback at regular intervals.
 
-        :param status_fn: status function to call
+        :param status_callback: status callback to call
         :param element: 'nuggets' or 'attributes'
+        :param ix: index of the current element
         :param total: total number of elements
-        :param ix: index of the current elements
         """
         if total == 0:
-            status_fn(f"Embedding {element} with {self.embedder_str}...", -1)
+            status_callback(f"Embedding {element} with {self.identifier}...", -1)
         elif ix == 0:
-            status_fn(f"Embedding {element} with {self.embedder_str}...", 0)
+            status_callback(f"Embedding {element} with {self.identifier}...", 0)
         else:
             interval: int = total // 10
             if interval != 0 and ix % interval == 0:
-                status_fn(f"Embedding {element} with {self.embedder_str}...", ix / total)
+                status_callback(f"Embedding {element} with {self.identifier}...", ix / total)
 
-    def __call__(
+    def _call(
             self,
             document_base: ASETDocumentBase,
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
-        """
-        Compute embedding signals for ASETNuggets and ASETAttributes of the given ASETDocumentBase.
-
-        :param document_base: ASETDocumentBase to work on
-        :param status_fn: callback function to communicate current status (message and progress)
-        :param statistics: statistics object to collect statistics
-        """
-        statistics["embedder_str"] = self.embedder_str
-
         # compute embeddings for the nuggets
         nuggets: List[ASETNugget] = document_base.nuggets
-        logger.info(f"Embed {len(nuggets)} nuggets with '{self.embedder_str}'.")
+        logger.info(f"Embed {len(nuggets)} nuggets with {self.identifier}.")
         tick: float = time.time()
-        status_fn(f"Embedding nuggets with {self.embedder_str}...", -1)
-        self.embed_nuggets(nuggets, status_fn, statistics["nuggets"])
-        status_fn(f"Embedding nuggets with {self.embedder_str}...", 1)
+        status_callback(f"Embedding nuggets with {self.identifier}...", -1)
+        statistics["nuggets"]["num_nuggets"] = len(nuggets)
+        self._embed_nuggets(nuggets, interaction_callback, status_callback, statistics["nuggets"])
+        status_callback(f"Embedding nuggets with {self.identifier}...", 1)
         tack: float = time.time()
-        logger.info(f"Embedded {len(nuggets)} nuggets with '{self.embedder_str}' in {tack - tick} seconds.")
+        logger.info(f"Embedded {len(nuggets)} nuggets with {self.identifier} in {tack - tick} seconds.")
+        statistics["nuggets"]["runtime"] = tack - tick
 
         # compute embeddings for the attributes
         attributes: List[ASETAttribute] = document_base.attributes
-        logger.info(f"Embed {len(attributes)} attributes with '{self.embedder_str}'.")
+        logger.info(f"Embed {len(attributes)} attributes with {self.identifier}.")
         tick: float = time.time()
-        status_fn(f"Embedding attributes with {self.embedder_str}...", -1)
-        self.embed_attributes(attributes, status_fn, statistics["attributes"])
-        status_fn(f"Embedding attributes with {self.embedder_str}...", 1)
+        status_callback(f"Embedding attributes with {self.identifier}...", -1)
+        statistics["attributes"]["num_attributes"] = len(attributes)
+        self._embed_attributes(attributes, interaction_callback, status_callback, statistics["attributes"])
+        status_callback(f"Embedding attributes with {self.identifier}...", 1)
         tack: float = time.time()
-        logger.info(f"Embedded {len(attributes)} attributes with '{self.embedder_str}' in {tack - tick} seconds.")
+        logger.info(f"Embedded {len(attributes)} attributes with {self.identifier} in {tack - tick} seconds.")
+        statistics["attributes"]["runtime"] = tack - tick
 
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
         """
-        Compute embeddings for the given list of ASETNuggets.
+        Compute embeddings for the given list of nuggets.
 
-        :param nuggets: list of ASETNuggets to work on
-        :param status_fn: callback function to communicate current status (message and progress)
+        :param nuggets: list of nuggets to work on
+        :param interaction_callback: callback to allow for user interaction
+        :param status_callback: callback to communicate current status (message and progress)
         :param statistics: statistics object to collect statistics
         """
         pass  # default behavior: do nothing
 
-    def embed_attributes(
+    def _embed_attributes(
             self,
             attributes: List[ASETAttribute],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
         """
         Compute embeddings for the given list of ASETNuggets.
 
         :param attributes: list of ASETAttributes to work on
-        :param status_fn: callback function to communicate current status (message and progress)
+        :param interaction_callback: callback to allow for user interaction
+        :param status_callback: callback to communicate current status (message and progress)
         :param statistics: statistics object to collect statistics
         """
         pass  # default behavior: do nothing
 
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> "BaseEmbedder":
-        return EMBEDDERS[config["embedder_str"]].from_config(config)
+
+########################################################################################################################
+# actual embedders
+########################################################################################################################
 
 
 class BaseSBERTEmbedder(BaseEmbedder, abc.ABC):
     """Base class for all embedders based on SBERT."""
+    identifier: str = "BaseSBERTEmbedder"
 
-    embedder_str: str = "BaseSBERTEmbedder"
-
-    def __init__(self, sbert_resource_str: str) -> None:
+    def __init__(self, sbert_resource_identifier: str) -> None:
         """
         Initialize the embedder.
 
-        :param sbert_resource_str: identifier of the SBERT model resource
+        :param sbert_resource_identifier: identifier of the SBERT model resource
         """
         super(BaseSBERTEmbedder, self).__init__()
-        self._sbert_resource_str: str = sbert_resource_str
+        self._sbert_resource_identifier: str = sbert_resource_identifier
 
         # preload required resources
-        resources.MANAGER.load(self._sbert_resource_str)
-        logger.debug(f"Initialized {self.embedder_str}.")
+        resources.MANAGER.load(self._sbert_resource_identifier)
+        logger.debug(f"Initialized '{self.identifier}'.")
 
     def to_config(self) -> Dict[str, Any]:
         return {
-            "embedder_str": self.embedder_str,
-            "sbert_resource_str": self._sbert_resource_str
+            "identifier": self.identifier,
+            "sbert_resource_identifier": self._sbert_resource_identifier
         }
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "BaseSBERTEmbedder":
-        return cls(config["sbert_resource_str"])
+        return cls(config["sbert_resource_identifier"])
 
 
-@register_embedder
+@register_configurable_element
 class SBERTLabelEmbedder(BaseSBERTEmbedder):
-    """
-    Label embedder based on SBERT.
+    """Label embedder based on SBERT."""
+    identifier: str = "SBERTLabelEmbedder"
 
-    works on ASETNuggets:
-    required signals: LabelSignal
-    produced signals: LabelEmbeddingSignal
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [NaturalLanguageLabelSignal.identifier],
+        "attributes": [NaturalLanguageLabelSignal.identifier],
+        "documents": []
+    }
 
-    works on ASETAttributes:
-    required signals: name
-    produced signals: LabelEmbeddingSignal
-    """
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [LabelEmbeddingSignal.identifier],
+        "attributes": [LabelEmbeddingSignal.identifier],
+        "documents": []
+    }
 
-    embedder_str: str = "SBERTLabelEmbedder"
-
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
-        texts: List[str] = [nugget[LabelSignal] for nugget in nuggets]
-        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+        texts: List[str] = [nugget[NaturalLanguageLabelSignal] for nugget in nuggets]
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_identifier].encode(
             texts, show_progress_bar=False
         )
 
         for nugget, embedding in zip(nuggets, embeddings):
             nugget[LabelEmbeddingSignal] = LabelEmbeddingSignal(embedding)
 
-    def embed_attributes(
+    def _embed_attributes(
             self,
             attributes: List[ASETAttribute],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
-        texts: List[str] = [attribute.name for attribute in attributes]
-        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+        texts: List[str] = [attribute[NaturalLanguageLabelSignal] for attribute in attributes]
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_identifier].encode(
             texts, show_progress_bar=False
         )
 
@@ -207,26 +196,32 @@ class SBERTLabelEmbedder(BaseSBERTEmbedder):
             attribute[LabelEmbeddingSignal] = LabelEmbeddingSignal(embedding)
 
 
-@register_embedder
+@register_configurable_element
 class SBERTTextEmbedder(BaseSBERTEmbedder):
-    """
-    Text embedder based on SBERT.
+    """Text embedder based on SBERT."""
+    identifier: str = "SBERTTextEmbedder"
 
-    works on ASETNuggets:
-    required signals: text
-    produced signals: TextEmbeddingSignal
-    """
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [],
+        "attributes": [],
+        "documents": []
+    }
 
-    embedder_str: str = "SBERTTextEmbedder"
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [TextEmbeddingSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
 
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
         texts: List[str] = [nugget.text for nugget in nuggets]
-        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_identifier].encode(
             texts, show_progress_bar=False
         )
 
@@ -234,79 +229,72 @@ class SBERTTextEmbedder(BaseSBERTEmbedder):
             nugget[TextEmbeddingSignal] = TextEmbeddingSignal(embedding)
 
 
-@register_embedder
+@register_configurable_element
 class SBERTExamplesEmbedder(BaseSBERTEmbedder):
-    """
-    SBERT-based embedder to embed user-provided example texts.
+    """SBERT-based embedder to embed user-provided example texts."""
+    identifier: str = "SBERTExamplesEmbedder"
 
-    works on ASETAttributes:
-    required signals: UserProvidedExamplesSignal
-    produced signals: TextEmbeddingSignal
-    """
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [],
+        "attributes": [UserProvidedExamplesSignal.identifier],
+        "documents": []
+    }
 
-    embedder_str: str = "SBERTExamplesEmbedder"
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [],
+        "attributes": [TextEmbeddingSignal.identifier],
+        "documents": []
+    }
 
-    def embed_attributes(
+    def _embed_attributes(
             self,
             attributes: List[ASETAttribute],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
         for ix, attribute in enumerate(attributes):
-            self._use_status_fn(status_fn, "attributes", len(attributes), ix)
+            self._use_status_callback_for_embedder(status_callback, "attributes", ix, len(attributes))
             texts: List[str] = attribute[UserProvidedExamplesSignal]
             if texts != []:
-                embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+                embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_identifier].encode(
                     texts, show_progress_bar=False
                 )
                 embedding: np.ndarray = np.mean(embeddings, axis=0)
                 attribute[TextEmbeddingSignal] = TextEmbeddingSignal(embedding)
+                statistics["num_has_examples"] += 1
             else:
                 statistics["num_no_examples"] += 1
 
 
-@register_embedder
+@register_configurable_element
 class SBERTContextSentenceEmbedder(BaseSBERTEmbedder):
-    """
-    Context sentence embedder based on SBERT.
+    """Context sentence embedder based on SBERT."""
+    identifier: str = "SBERTContextSentenceEmbedder"
 
-    works on ASETNuggets:
-    required signals: start_char, end_char, and document.text
-    produced signals: ContextSentenceEmbeddingSignal
-    """
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [CachedContextSentenceSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
 
-    embedder_str: str = "SBERTContextSentenceEmbedder"
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [ContextSentenceEmbeddingSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
 
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
-        # collect context sentences
-        texts: List[str] = []
-        for nugget in nuggets:
-            sent_start_chars: List[int] = nugget.document[SentenceStartCharsAnnotation]
-            context_start_char: int = 0
-            context_end_char: int = 0
-            for ix, sent_start_char in enumerate(sent_start_chars):
-                if sent_start_char > nugget.start_char:
-                    if ix == 0:
-                        context_start_char: int = 0
-                        context_end_char: int = sent_start_char
-                        break
-                    else:
-                        context_start_char: int = sent_start_chars[ix - 1]
-                        context_end_char: int = sent_start_char
-                        break
-            else:
-                if sent_start_chars != []:
-                    context_start_char: int = sent_start_chars[-1]
-                    context_end_char: int = len(nugget.document.text)
-            texts.append(nugget.document.text[context_start_char:context_end_char])
+        texts: List[str] = [nugget[CachedContextSentenceSignal]["text"] for nugget in nuggets]
 
         # compute embeddings
-        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_str].encode(
+        embeddings: List[np.ndarray] = resources.MANAGER[self._sbert_resource_identifier].encode(
             texts, show_progress_bar=False
         )
 
@@ -314,72 +302,67 @@ class SBERTContextSentenceEmbedder(BaseSBERTEmbedder):
             nugget[ContextSentenceEmbeddingSignal] = ContextSentenceEmbeddingSignal(embedding)
 
 
-@register_embedder
+@register_configurable_element
 class BERTContextSentenceEmbedder(BaseEmbedder):
     """
     Context sentence embedder based on BERT.
 
     Computes the context embedding of an ASETNugget as the mean of the final hidden states of the tokens that make up
     the nugget in its context sentence.
-
-    works on ASETNuggets:
-    required signals: start_char, end_char, and document.text
-    produced signals: ContextSentenceEmbeddingSignal
     """
+    identifier: str = "BERTContextSentenceEmbedder"
 
-    embedder_str: str = "BERTContextSentenceEmbedder"
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [CachedContextSentenceSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
 
-    def __init__(self, bert_resource_str: str) -> None:
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [ContextSentenceEmbeddingSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
+
+    def __init__(self, bert_resource_identifier: str) -> None:
         """
         Initialize the BERTContextSentenceEmbedder.
 
-        :param bert_resource_str: identifier of the BERT model resource
+        :param bert_resource_identifier: identifier of the BERT model resource
         """
         super(BERTContextSentenceEmbedder, self).__init__()
-        self._bert_resource_str: str = bert_resource_str
+        self._bert_resource_identifier: str = bert_resource_identifier
 
         # preload required resources
-        resources.MANAGER.load(self._bert_resource_str)
-        logger.debug(f"Initialized {self.embedder_str}.")
+        resources.MANAGER.load(self._bert_resource_identifier)
+        logger.debug(f"Initialized '{self.identifier}'.")
 
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
 
-        for nugget_ix, nugget in enumerate(nuggets):
-            self._use_status_fn(status_fn, "nuggets", len(nuggets), nugget_ix)
-            # get the context sentence
-            sent_start_chars: List[int] = nugget.document[SentenceStartCharsAnnotation]
-            context_start_char: int = 0
-            context_end_char: int = 0
-            for ix, sent_start_char in enumerate(sent_start_chars):
-                if sent_start_char > nugget.start_char:
-                    if ix == 0:
-                        context_start_char: int = 0
-                        context_end_char: int = sent_start_char
-                        break
-                    else:
-                        context_start_char: int = sent_start_chars[ix - 1]
-                        context_end_char: int = sent_start_char
-                        break
-            else:
-                if sent_start_chars != []:
-                    context_start_char: int = sent_start_chars[-1]
-                    context_end_char: int = len(nugget.document.text)
+        if resources.MANAGER[self._bert_resource_identifier]["device"] is not None:
+            resources.MANAGER[self._bert_resource_identifier]["model"].to(
+                resources.MANAGER[self._bert_resource_identifier]["device"]
+            )
 
-            context_sentence: str = nugget.document.text[context_start_char:context_end_char]
-            start_in_context: int = nugget.start_char - context_start_char
-            end_in_context: int = nugget.end_char - context_start_char
+        for nugget_ix, nugget in enumerate(nuggets):
+            self._use_status_callback_for_embedder(status_callback, "nuggets", nugget_ix, len(nuggets))
+
+            context_sentence: str = nugget[CachedContextSentenceSignal]["text"]
+            start_in_context: int = nugget[CachedContextSentenceSignal]["start_char"]
+            end_in_context: int = nugget[CachedContextSentenceSignal]["end_char"]
 
             # compute the sentence's token embeddings
-            encoding = resources.MANAGER[self._bert_resource_str]["tokenizer"](
+            encoding = resources.MANAGER[self._bert_resource_identifier]["tokenizer"](
                 context_sentence, return_tensors="pt", padding=True
             )
 
-            device = resources.MANAGER[self._bert_resource_str]["device"]
+            device = resources.MANAGER[self._bert_resource_identifier]["device"]
             if device is not None:
                 input_ids = encoding.input_ids.to(device)
                 token_type_ids = encoding.token_type_ids.to(device)
@@ -389,7 +372,7 @@ class BERTContextSentenceEmbedder(BaseEmbedder):
                 token_type_ids = encoding.token_type_ids
                 attention_mask = encoding.attention_mask
 
-            outputs = resources.MANAGER[self._bert_resource_str]["model"](
+            outputs = resources.MANAGER[self._bert_resource_identifier]["model"](
                 input_ids=input_ids,
                 token_type_ids=token_type_ids,
                 attention_mask=attention_mask
@@ -410,24 +393,25 @@ class BERTContextSentenceEmbedder(BaseEmbedder):
             if token_indices == []:
                 statistics["num_no_token_indices"] += 1
                 logger.error(f"There are no token indices for nugget '{nugget.text}' in '{context_sentence}'!")
-                assert False, f"There are no token indices for nugget '{nugget.text}' in '{context_sentence}'!"
-
-            # compute the embedding as the mean of the nugget's tokens' embeddings
-            embedding: np.ndarray = np.mean(output[token_indices], axis=0)
+                logger.error("==> Using all-zero embedding vector.")
+                embedding: np.ndarray = np.zeros_like(output[0])
+            else:
+                # compute the embedding as the mean of the nugget's tokens' embeddings
+                embedding: np.ndarray = np.mean(output[token_indices], axis=0)
             nugget[ContextSentenceEmbeddingSignal] = ContextSentenceEmbeddingSignal(embedding)
 
     def to_config(self) -> Dict[str, Any]:
         return {
-            "embedder_str": self.embedder_str,
-            "bert_resource_str": self._bert_resource_str
+            "identifier": self.identifier,
+            "bert_resource_identifier": self._bert_resource_identifier
         }
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "BERTContextSentenceEmbedder":
-        return cls(config["bert_resource_str"])
+        return cls(config["bert_resource_identifier"])
 
 
-@register_embedder
+@register_configurable_element
 class RelativePositionEmbedder(BaseEmbedder):
     """
     Position embedder that embeds the character position of a nugget relative to the start and end of the document.
@@ -436,30 +420,43 @@ class RelativePositionEmbedder(BaseEmbedder):
     required signals: start_char and document.text
     produced signals: RelativePositionSignal
     """
+    identifier: str = "RelativePositionEmbedder"
 
-    embedder_str: str = "RelativePositionEmbedder"
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [],
+        "attributes": [],
+        "documents": []
+    }
+
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [RelativePositionSignal.identifier],
+        "attributes": [],
+        "documents": []
+    }
 
     def __init__(self) -> None:
         super(RelativePositionEmbedder, self).__init__()
-        logger.debug(f"Initialized {self.embedder_str}.")
+        logger.debug(f"Initialized '{self.identifier}'.")
 
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
         for ix, nugget in enumerate(nuggets):
-            self._use_status_fn(status_fn, "nuggets", len(nuggets), ix)
+            self._use_status_callback_for_embedder(status_callback, "nuggets", ix, len(nuggets))
             if len(nugget.document.text) == 0:
                 nugget[RelativePositionSignal] = RelativePositionSignal(0)
+                statistics["num_text_is_empty"] += 1
             else:
                 relative_position: float = nugget.start_char / len(nugget.document.text)
                 nugget[RelativePositionSignal] = RelativePositionSignal(relative_position)
 
     def to_config(self) -> Dict[str, Any]:
         return {
-            "embedder_str": self.embedder_str
+            "identifier": self.identifier
         }
 
     @classmethod
@@ -467,40 +464,43 @@ class RelativePositionEmbedder(BaseEmbedder):
         return cls()
 
 
-@register_embedder
+@register_configurable_element
 class FastTextLabelEmbedder(BaseEmbedder):
     """
     Label embedder based on FastText.
 
     Splits the labels by '_' and by spaces and computes the embedding as the mean of the tokens' FastText embeddings.
-
-    works on ASETNuggets:
-    required signals: LabelSignal
-    produced signals: LabelEmbeddingSignal
-
-    works on ASETAttributes:
-    required signals: name
-    produced signals: LabelEmbeddingSignal
     """
+    identifier: str = "FastTextLabelEmbedder"
 
-    embedder_str: str = "FastTextLabelEmbedder"
+    required_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [NaturalLanguageLabelSignal.identifier],
+        "attributes": [NaturalLanguageLabelSignal.identifier],
+        "documents": []
+    }
 
-    def __init__(self, embedding_resource_str: str, do_lowercase: bool, splitters: List[str]) -> None:
+    generated_signal_identifiers: Dict[str, List[str]] = {
+        "nuggets": [LabelEmbeddingSignal.identifier],
+        "attributes": [LabelEmbeddingSignal.identifier],
+        "documents": []
+    }
+
+    def __init__(self, embedding_resource_identifier: str, do_lowercase: bool, splitters: List[str]) -> None:
         """
         Initialize the FastTextLabelEmbedder.
 
-        :param embedding_resource_str: identifier of the FastText resource
+        :param embedding_resource_identifier: identifier of the FastText resource
         :param do_lowercase: whether to lowercase tokens before embedding them
         :param splitters: characters at which the label should be split into tokens
         """
         super(FastTextLabelEmbedder, self).__init__()
-        self._embedding_resource_str: str = embedding_resource_str
+        self._embedding_resource_identifier: str = embedding_resource_identifier
         self._do_lowercase: bool = do_lowercase
         self._splitters: List[str] = splitters
 
         # preload required resources
-        resources.MANAGER.load(self._embedding_resource_str)
-        logger.debug(f"Initialized {self.embedder_str}.")
+        resources.MANAGER.load(self._embedding_resource_identifier)
+        logger.debug(f"Initialized '{self.identifier}'.")
 
     def _compute_embedding(self, label: str, statistics: Statistics) -> LabelEmbeddingSignal:
         """
@@ -525,9 +525,11 @@ class FastTextLabelEmbedder(BaseEmbedder):
         # compute the embeddings
         embeddings: List[np.ndarray] = []
         for token in tokens:
-            if token in resources.MANAGER[self._embedding_resource_str].keys():
-                embeddings.append(resources.MANAGER[self._embedding_resource_str][token])
-            statistics["num_unknown_tokens"] += 1
+            if token in resources.MANAGER[self._embedding_resource_identifier]:
+                embeddings.append(resources.MANAGER[self._embedding_resource_identifier][token])
+            else:
+                statistics["num_unknown_tokens"] += 1
+                statistics["unknown_tokens"].add(token)
 
         if embeddings == []:
             statistics["unable_to_embed_label"] += 1
@@ -537,35 +539,40 @@ class FastTextLabelEmbedder(BaseEmbedder):
             # noinspection PyTypeChecker
             return LabelEmbeddingSignal(np.mean(np.array(embeddings), axis=0))
 
-    def embed_nuggets(
+    def _embed_nuggets(
             self,
             nuggets: List[ASETNugget],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
+        statistics["unknown_tokens"] = set()
+
         for ix, nugget in enumerate(nuggets):
-            self._use_status_fn(status_fn, "nuggets", len(nuggets), ix)
-            label: str = nugget[LabelSignal]
+            self._use_status_callback_for_embedder(status_callback, "nuggets", ix, len(nuggets))
+            label: str = nugget[NaturalLanguageLabelSignal]
             nugget[LabelEmbeddingSignal] = self._compute_embedding(label, statistics)
 
-    def embed_attributes(
+    def _embed_attributes(
             self,
             attributes: List[ASETAttribute],
-            status_fn: StatusFunction,
+            interaction_callback: BaseInteractionCallback,
+            status_callback: BaseStatusCallback,
             statistics: Statistics
     ) -> None:
         for ix, attribute in enumerate(attributes):
-            self._use_status_fn(status_fn, "attributes", len(attributes), ix)
-            attribute[LabelEmbeddingSignal] = self._compute_embedding(attribute.name, statistics)
+            self._use_status_callback_for_embedder(status_callback, "attributes", ix, len(attributes))
+            label: str = attribute[NaturalLanguageLabelSignal]
+            attribute[LabelEmbeddingSignal] = self._compute_embedding(label, statistics)
 
     def to_config(self) -> Dict[str, Any]:
         return {
-            "embedder_str": self.embedder_str,
-            "embedding_resource_str": self._embedding_resource_str,
+            "identifier": self.identifier,
+            "embedding_resource_identifier": self._embedding_resource_identifier,
             "do_lowercase": self._do_lowercase,
             "splitters": self._splitters
         }
 
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "FastTextLabelEmbedder":
-        return cls(config["embedding_resource_str"], config["do_lowercase"], config["splitters"])
+        return cls(config["embedding_resource_identifier"], config["do_lowercase"], config["splitters"])

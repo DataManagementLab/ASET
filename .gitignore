@@ -18,4 +18,15 @@ __pycache__/
 !/datasets/aviation/aviation.py
 !/datasets/corona/corona.py
 !/datasets/countries/countries.py
+!/datasets/countries_capital/countries_capital.py
+!/datasets/countries_continent/countries_continent.py
+!/datasets/countries_official_language/countries_official_language.py
 !/datasets/nobel/nobel.py
+!/datasets/nobel_country/nobel_country.py
+!/datasets/nobel_date_of_birth/nobel_date_of_birth.py
+!/datasets/nobel_date_of_death/nobel_date_of_death.py
+!/datasets/nobel_field_of_work/nobel_field_of_work.py
+!/datasets/skyscrapers/skyscrapers.py
+!/datasets/skyscrapers_architect/skyscrapers_architect.py
+!/datasets/skyscrapers_country/skyscrapers_country.py
+!/datasets/skyscrapers_owned_by/skyscrapers_owned_by.py
