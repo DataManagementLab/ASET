@@ -1,3 +1,5 @@
+This repository contains the code for our demo publication at SIGMOD'22. We continued the project as [WannaDB](https://link.tuda.systems/wannadb).
+
 # ASET: Ad-hoc Structured Exploration of Text Collections
 
 ![ASET Overview](aset-overview.png)
